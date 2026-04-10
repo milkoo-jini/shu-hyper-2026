@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime, re, time, requests
 from bs4 import BeautifulSoup
+import pytz  # 한국 시간 설정을 위해 추가
 
 # --- [1. SHU HYPER ENGINE: 로직 무결성 유지] ---
 class ShuHyperMonitorWeb:
@@ -12,6 +13,8 @@ class ShuHyperMonitorWeb:
         self.fixed_topics = ["북중미 월드컵", "2026 지방선거"]
         self.risk_keywords = ["논란", "비판", "폭로", "의혹", "사기", "피해", "수사", "연패", "경질", "공천", "중계권", "충격", "속보"]
         self.exclude_ad_keywords = ["[Who Is ?]", "인물열전", "CEO스토리", "기업인사", "조언", "상담", "변호사", "법무법인", "선임", "전문가", "무료상담", "승소", "법률사무소", "홍보", "마케팅"]
+        # 한국 시간대 설정
+        self.korea_tz = pytz.timezone('Asia/Seoul')
 
     def fetch_all_routes(self):
         pool = []
@@ -55,6 +58,10 @@ class ShuHyperMonitorWeb:
     def run_engine(self):
         final_list = []
         raw_data = self.fetch_all_routes()
+        # 현재 한국 시간 생성
+        now_korea = datetime.datetime.now(self.korea_tz)
+        current_time_str = now_korea.strftime('%m/%d %H:%M')
+
         for item in raw_data:
             if any(ad in item['kw'] for ad in self.exclude_ad_keywords): continue
             is_risk = any(rk in item['kw'] for rk in self.risk_keywords)
@@ -62,17 +69,20 @@ class ShuHyperMonitorWeb:
 
             if is_risk or is_fixed:
                 final_list.append({
-                    'TIME': datetime.datetime.now().strftime('%H:%M:%S'),
-                    'TYPE': 'RISK' if is_risk else 'FIXED',
+                    'TIME': current_time_str,
+                    'TYPE': 'FIXED' if is_fixed else 'RISK', # FIXED 우선 분류
                     'SOURCE': item['src'],
                     'HEADLINE': item['kw']
                 })
         
         if final_list:
+            # 1순위: TYPE(FIXED가 RISK보다 사전순으로 앞이라 위로 올라감), 2순위: 원래 순서 유지
             df = pd.DataFrame(final_list)
-            fname = f"Shu_Hyper_Report_{datetime.datetime.now().strftime('%m%d_%H%M')}.xlsx"
+            df = df.sort_values(by=['TYPE'], ascending=True).reset_index(drop=True)
+            
+            fname = f"Shu_Hyper_Report_{now_korea.strftime('%m%d_%H%M')}.xlsx"
             df.to_excel(fname, index=False)
-            return final_list, fname
+            return df.to_dict('records'), fname
         return [], None
 
 # --- [2. UI 설정: 아이케어 필터링 대시보드] ---
@@ -103,7 +113,6 @@ with c1:
             st.rerun()
 
 with c2:
-    # 수집된 결과가 있을 때만 필터 활성화
     sources = ["전체 채널"] + list(set([d['SOURCE'] for d in st.session_state['results']])) if st.session_state['results'] else ["데이터 없음"]
     selected_source = st.selectbox("🎯 채널별로 보기", sources)
 
