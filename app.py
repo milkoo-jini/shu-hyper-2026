@@ -4,7 +4,7 @@ import datetime, re, time, requests, io
 from bs4 import BeautifulSoup
 import pytz
 
-# --- [1. SHU HYPER ENGINE: 로직 무결성 100% 유지] ---
+# --- [1. SHU HYPER ENGINE: 링크 보정 로직] ---
 class ShuHyperMonitorWeb:
     def __init__(self):
         self.naver_id = st.secrets["NAVER_ID"]
@@ -34,34 +34,32 @@ class ShuHyperMonitorWeb:
         pool = []
         h = {'X-Naver-Client-Id': self.naver_id, 'X-Naver-Client-Secret': self.naver_secret}
         try:
+            # 1. 고정 주제 수집
             for t in self.fixed_topics:
                 t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=20&sort=date", headers=h).json()
                 pool.extend([{'src': f'📍 고정주제({t})', 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in t_n.get('items', [])])
 
+            # 2. 실시간 뉴스 및 기타 채널
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
             pool.extend([{'src': self.get_friendly_name('NAVER_DATE'), 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_date.get('items', [])])
             
-            n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=15&sort=sim", headers=h).json()
-            pool.extend([{'src': self.get_friendly_name('NAVER_SIM'), 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_sim.get('items', [])])
-            
+            # [보정] 구글 트렌드 (XML 에러 방지용 링크 생성)
+            g_trends = requests.get("https://trends.google.com/trending/rss?geo=KR", headers=self.headers)
+            for i in BeautifulSoup(g_trends.text, 'xml').find_all('item')[:10]:
+                # XML 파일로 가는 대신 해당 키워드의 구글 검색 결과로 링크 대체
+                trend_kw = i.title.text
+                clean_url = f"https://www.google.com/search?q={trend_kw}&tbm=nws" # 뉴스 탭으로 이동
+                pool.append({'src': self.get_friendly_name('G_TRENDS'), 'kw': trend_kw, 'url': clean_url})
+
+            # 나머지 채널 (기존 로직 동일)
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
             pool.extend([{'src': self.get_friendly_name('SIGNAL'), 'kw': i['keyword'], 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
             nate = requests.get("https://news.nate.com/edit/issueup/", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('NATE'), 'kw': a.text.strip(), 'url': 'https://news.nate.com'+a['href']} for a in BeautifulSoup(nate.text, 'html.parser').select('.txt_tit')[:10]])
-            zum = requests.get("https://zum.com/#!/home", headers=self.headers)
-            pool.extend([{'src': self.get_friendly_name('ZUM'), 'kw': a.text.strip(), 'url': f"https://search.zum.com/search.zum?query={a.text.strip()}"} for a in BeautifulSoup(zum.text, 'html.parser').select('.issue_keyword .txt')[:10]])
-            g_trends = requests.get("https://trends.google.com/trending/rss?geo=KR", headers=self.headers)
-            for i in BeautifulSoup(g_trends.text, 'xml').find_all('item')[:10]:
-                target_url = i.find('link').get_text() if i.find('link') else f"https://www.google.com/search?q={i.title.text}"
-                pool.append({'src': self.get_friendly_name('G_TRENDS'), 'kw': i.title.text, 'url': target_url})
             d_res = requests.get("https://news.daum.net/ranking/popular", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('DAUM'), 'kw': a.text.strip(), 'url': a['href']} for a in BeautifulSoup(d_res.text, 'html.parser').select('.link_txt')[:20]])
-            g_news = requests.get("https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko", headers=self.headers)
-            pool.extend([{'src': self.get_friendly_name('G_NEWS'), 'kw': i.title.text, 'url': i.link.text} for i in BeautifulSoup(g_news.text, 'xml').find_all('item')[:15]])
             fm = requests.get("https://www.fmkorea.com/best", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('FMKOREA'), 'kw': a.get_text().strip(), 'url': 'https://www.fmkorea.com'+a['href']} for a in BeautifulSoup(fm.text, 'html.parser').select('.title.hotdeal_var8 a')[:15]])
-            dc = requests.get("https://www.dcinside.com/", headers=self.headers)
-            pool.extend([{'src': self.get_friendly_name('DCINSIDE'), 'kw': a.get_text().strip(), 'url': a['href']} for a in BeautifulSoup(dc.text, 'html.parser').select('.box_best .list_best li a')[:10]])
         except: pass
 
         seen, unique_pool = set(), []
@@ -83,6 +81,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 if 'data' not in st.session_state: st.session_state.data = []
+if 'select_all' not in st.session_state: st.session_state.select_all = True
 
 st.title("🛡️ 실시간 이슈 관제 센터")
 
@@ -92,9 +91,10 @@ with col1:
         engine = ShuHyperMonitorWeb()
         with st.spinner("수집 중..."):
             st.session_state.data = engine.fetch_all_routes()
+            st.session_state.select_all = True
             st.rerun()
 with col2:
-    search_query = st.text_input("🔍 키워드 검색", placeholder="소노, 사고, 논란 등")
+    search_query = st.text_input("🔍 키워드 검색", placeholder="검색어를 입력하세요")
 with col3:
     count = len(st.session_state.data) if st.session_state.data else 0
     st.text_input("📊 수집 현황", value=f"{count}개 이슈 탐지됨", disabled=True)
@@ -104,17 +104,28 @@ st.divider()
 if st.session_state.data:
     df_raw = pd.DataFrame(st.session_state.data)
     
+    # 정렬 (지방선거 > 월드컵 > 실시간 뉴스 > 나머지)
     def sort_order(src):
         if "지방선거" in src: return 0
         if "월드컵" in src: return 1
         if "실시간 뉴스" in src: return 2
         return 3
-    
     df_raw['order'] = df_raw['src'].apply(sort_order)
     df_raw = df_raw.sort_values(by='order').reset_index(drop=True)
 
+    # 필터 및 선택 버튼
     all_srcs = ["전체 채널"] + sorted(list(df_raw['src'].unique()))
     selected_source = st.pills("🎯 채널 필터", all_srcs, default="전체 채널")
+
+    btn_col1, btn_col2, _ = st.columns([1.5, 1.5, 7])
+    with btn_col1:
+        if st.button("✅ 전체 선택"): 
+            st.session_state.select_all = True
+            st.rerun()
+    with btn_col2:
+        if st.button("❌ 선택 해제"): 
+            st.session_state.select_all = False
+            st.rerun()
 
     f_df = df_raw.copy()
     if search_query: f_df = f_df[f_df['kw'].str.contains(search_query, case=False)]
@@ -123,39 +134,27 @@ if st.session_state.data:
     display_df = pd.DataFrame({
         '시각': datetime.datetime.now(pytz.timezone('Asia/Seoul')).strftime('%H:%M'),
         '출처': f_df['src'],
-        '제목': f_df['kw'],
-        '원문 링크': f_df['url'],
-        '선택': True
+        '헤드라인': f_df['url'],
+        '제목텍스트': f_df['kw'],
+        '선택': st.session_state.select_all
     })
 
-    st.subheader(f"📋 관제 리스트 ({len(display_df)}건)")
     edited_df = st.data_editor(
         display_df,
         column_config={
             "시각": st.column_config.TextColumn("시각", width="small"),
             "출처": st.column_config.TextColumn("출처", width="medium"),
-            "제목": st.column_config.TextColumn("이슈 헤드라인", width="large"),
-            "원문 링크": st.column_config.LinkColumn("🔗 바로가기", width="small"),
-            "선택": st.column_config.CheckboxColumn("조치", default=True)
+            "헤드라인": st.column_config.LinkColumn("헤드라인 (클릭 시 이동)", display_text=r"^.+$", width="large"),
+            "제목텍스트": None,
+            "선택": st.column_config.CheckboxColumn("조치", default=st.session_state.select_all)
         },
-        column_order=("시각", "출처", "제목", "원문 링크", "선택"),
-        hide_index=True,
-        use_container_width=True,
-        height=600
+        column_order=("시각", "출처", "헤드라인", "선택"),
+        hide_index=True, use_container_width=True, height=600
     )
 
-    # [에러 해결 포인트] engine='xlsxwriter' 제거 -> 기본 엔진 사용
     selected_rows = edited_df[edited_df['선택'] == True]
     if not selected_rows.empty:
         output = io.BytesIO()
-        # xlsxwriter 대신 범용적인 기본 엔진으로 변경하여 에러 원천 차단
         with pd.ExcelWriter(output) as writer:
             selected_rows.drop(columns=['선택']).to_excel(writer, index=False)
-        
-        st.download_button(
-            label=f"✅ 선택한 {len(selected_rows)}건 리포트 다운로드",
-            data=output.getvalue(),
-            file_name=f"Shu_Report_{datetime.datetime.now().strftime('%m%d_%H%M')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
+        st.download_button(label="✅ 리포트 다운로드", data=output.getvalue(), file_name="Shu_Report.xlsx", use_container_width=True)
