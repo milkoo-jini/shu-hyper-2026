@@ -73,15 +73,19 @@ class ShuHyperMonitorWeb:
                 unique_pool.append(item)
         return unique_pool
 
-# --- [2. UI 설정: 오류 수정 및 정렬 최적화] ---
+# --- [2. UI 설정: 동일 사이즈 및 칼정렬 최적화] ---
 st.set_page_config(layout="wide", page_title="실시간 이슈 모니터링")
 
-# [수정] 에러를 유발하는 vertical_alignment 대신 CSS로 바닥 정렬 구현
+# CSS를 사용하여 높이와 정렬을 강제로 맞춤
 st.markdown("""
     <style>
     [data-testid="column"] {
         display: flex;
         align-items: flex-end;
+    }
+    .stButton > button {
+        height: 3.0rem !important; /* 입력창 높이와 일치 */
+        margin-bottom: 1px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -90,18 +94,23 @@ if 'data' not in st.session_state: st.session_state.data = []
 
 st.title("🛡️ 실시간 이슈 관제 센터")
 
-# [수정] vertical_alignment 옵션 제거하여 에러 차단
-col_btn, col_search, col_spacer = st.columns([1.2, 2.5, 4.5])
+# [수정] 1:1:1 비율로 정렬 (동일 사이즈)
+col1, col2, col3 = st.columns([1, 1, 1])
 
-with col_btn:
+with col1:
     if st.button("🚀 전체 채널 스캔", use_container_width=True):
         engine = ShuHyperMonitorWeb()
         with st.spinner("수집 중..."):
             st.session_state.data = engine.fetch_all_routes()
             st.rerun()
 
-with col_search:
-    search_query = st.text_input("🔍 키워드 검색")
+with col2:
+    search_query = st.text_input("🔍 키워드 검색", placeholder="소노, 사고, 논란 등")
+
+with col3:
+    # 검색된 결과 개수를 보여주는 읽기 전용 칸 (디자인 일관성용)
+    count = len(st.session_state.data) if st.session_state.data else 0
+    st.text_input("📊 현재 수집 현황", value=f"{count}개 이슈 탐지됨", disabled=True)
 
 st.divider()
 
