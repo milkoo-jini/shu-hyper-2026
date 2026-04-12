@@ -46,7 +46,7 @@ class ShuHyperMonitorWeb:
                 t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=20&sort=date", headers=h).json()
                 pool.extend([{'src': f'📍 고정관제({t})', 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in t_n.get('items', [])])
 
-            # 4~11. 기타 채널 (SIGNAL, NATE, ZUM, G-TRENDS, DAUM, G-NEWS, FMKOREA, DC)
+            # 4~11. 기타 채널
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
             pool.extend([{'src': self.get_friendly_name('SIGNAL'), 'kw': i['keyword'], 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
             nate = requests.get("https://news.nate.com/edit/issueup/", headers=self.headers)
@@ -73,15 +73,25 @@ class ShuHyperMonitorWeb:
                 unique_pool.append(item)
         return unique_pool
 
-# --- [2. UI 설정: 정렬 및 사이즈 최적화] ---
+# --- [2. UI 설정: 오류 수정 및 정렬 최적화] ---
 st.set_page_config(layout="wide", page_title="실시간 이슈 모니터링")
+
+# [수정] 에러를 유발하는 vertical_alignment 대신 CSS로 바닥 정렬 구현
+st.markdown("""
+    <style>
+    [data-testid="column"] {
+        display: flex;
+        align-items: flex-end;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 if 'data' not in st.session_state: st.session_state.data = []
 
 st.title("🛡️ 실시간 이슈 관제 센터")
 
-# [핵심] 줄맞춤(vertical_alignment) 및 컴팩트 비율 설정
-col_btn, col_search, col_spacer = st.columns([1.2, 2.5, 4.5], vertical_alignment="end")
+# [수정] vertical_alignment 옵션 제거하여 에러 차단
+col_btn, col_search, col_spacer = st.columns([1.2, 2.5, 4.5])
 
 with col_btn:
     if st.button("🚀 전체 채널 스캔", use_container_width=True):
@@ -98,18 +108,15 @@ st.divider()
 if st.session_state.data:
     df_raw = pd.DataFrame(st.session_state.data)
     
-    # 채널 필터
     all_srcs = ["전체 채널"] + sorted(list(df_raw['src'].unique()))
     selected_source = st.pills("🎯 채널 필터", all_srcs, default="전체 채널")
 
-    # 필터링 로직
     f_df = df_raw.copy()
     if search_query:
         f_df = f_df[f_df['kw'].str.contains(search_query, case=False)]
     if selected_source != "전체 채널":
         f_df = f_df[f_df['src'] == selected_source]
 
-    # 표시용 DF 가공
     display_df = pd.DataFrame({
         '시각': datetime.datetime.now(pytz.timezone('Asia/Seoul')).strftime('%H:%M'),
         '출처': f_df['src'],
@@ -118,7 +125,6 @@ if st.session_state.data:
         '선택': True
     })
 
-    # [핵심] 에러 수정 및 컬럼 정렬 (LinkColumn 정규식 적용)
     st.subheader(f"📋 관제 리스트 ({len(display_df)}건)")
     edited_df = st.data_editor(
         display_df,
@@ -127,10 +133,10 @@ if st.session_state.data:
             "출처": st.column_config.TextColumn("출처", width="medium"),
             "헤드라인": st.column_config.LinkColumn(
                 "헤드라인 (클릭 시 이동)", 
-                display_text=r"^.+$", # 에러 해결 포인트
+                display_text=r"^.+$", 
                 width="large"
             ),
-            "제목텍스트": None, # 화면 숨김
+            "제목텍스트": None, 
             "선택": st.column_config.CheckboxColumn("조치", default=True)
         },
         column_order=("시각", "출처", "헤드라인", "선택"),
@@ -139,7 +145,6 @@ if st.session_state.data:
         height=600
     )
 
-    # 선택 다운로드
     selected_rows = edited_df[edited_df['선택'] == True]
     if not selected_rows.empty:
         output = io.BytesIO()
