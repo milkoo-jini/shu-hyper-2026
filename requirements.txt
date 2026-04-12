@@ -6,3 +6,4 @@ openpyxl
 lxml
 pytz
 xlsxwriter
+scikit-learn
