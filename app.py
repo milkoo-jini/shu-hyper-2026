@@ -108,7 +108,7 @@ with col_btn:
             st.rerun()
 
 with col_search:
-    search_query = st.text_input("🔍 이슈 키워드 검색 (소노, 사고, 논란 등)", "")
+    search_query = st.text_input("🔍 키워드 검색", "")
 
 if st.session_state.data:
     df_raw = pd.DataFrame(st.session_state.data)
