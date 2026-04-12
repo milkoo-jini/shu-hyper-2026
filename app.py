@@ -10,7 +10,7 @@ class ShuHyperMonitorWeb:
         self.naver_id = st.secrets["NAVER_ID"]
         self.naver_secret = st.secrets["NAVER_SECRET"]
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        self.fixed_topics = ["지방선거", "월드컵"] # 순서 조정
+        self.fixed_topics = ["지방선거", "월드컵"]
         self.risk_keywords = ["논란", "비판", "폭로", "의혹", "사기", "피해", "수사", "연패", "경질", "공천", "중계권", "충격", "속보"]
         self.exclude_ad_keywords = ["변호사", "법무법인", "무료상담", "승소", "마케팅", "홍보","기고"]
         self.korea_tz = pytz.timezone('Asia/Seoul')
@@ -34,20 +34,16 @@ class ShuHyperMonitorWeb:
         pool = []
         h = {'X-Naver-Client-Id': self.naver_id, 'X-Naver-Client-Secret': self.naver_secret}
         try:
-            # 1. 고정 주제 (지방선거, 월드컵)
             for t in self.fixed_topics:
                 t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=20&sort=date", headers=h).json()
                 pool.extend([{'src': f'📍 고정주제({t})', 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in t_n.get('items', [])])
 
-            # 2. 네이버 실시간 뉴스
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
             pool.extend([{'src': self.get_friendly_name('NAVER_DATE'), 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_date.get('items', [])])
             
-            # 3. 네이버 주요 이슈(정확도순)
             n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=15&sort=sim", headers=h).json()
             pool.extend([{'src': self.get_friendly_name('NAVER_SIM'), 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_sim.get('items', [])])
             
-            # 4. 기타 채널들 (원래 로직 그대로)
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
             pool.extend([{'src': self.get_friendly_name('SIGNAL'), 'kw': i['keyword'], 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
             nate = requests.get("https://news.nate.com/edit/issueup/", headers=self.headers)
@@ -76,7 +72,7 @@ class ShuHyperMonitorWeb:
                 unique_pool.append(item)
         return unique_pool
 
-# --- [2. UI 설정: 칼정렬 및 데이터 표시] ---
+# --- [2. UI 설정] ---
 st.set_page_config(layout="wide", page_title="실시간 이슈 모니터링")
 
 st.markdown("""
@@ -108,7 +104,6 @@ st.divider()
 if st.session_state.data:
     df_raw = pd.DataFrame(st.session_state.data)
     
-    # 정렬용 헬퍼 컬럼 추가 (지방선거=0, 월드컵=1, 실시간뉴스=2, 나머지=3)
     def sort_order(src):
         if "지방선거" in src: return 0
         if "월드컵" in src: return 1
@@ -149,9 +144,18 @@ if st.session_state.data:
         height=600
     )
 
+    # [에러 해결 포인트] engine='xlsxwriter' 제거 -> 기본 엔진 사용
     selected_rows = edited_df[edited_df['선택'] == True]
     if not selected_rows.empty:
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        # xlsxwriter 대신 범용적인 기본 엔진으로 변경하여 에러 원천 차단
+        with pd.ExcelWriter(output) as writer:
             selected_rows.drop(columns=['선택']).to_excel(writer, index=False)
-        st.download_button(label="✅ 리포트 다운로드", data=output.getvalue(), file_name="Shu_Report.xlsx", use_container_width=True)
+        
+        st.download_button(
+            label=f"✅ 선택한 {len(selected_rows)}건 리포트 다운로드",
+            data=output.getvalue(),
+            file_name=f"Shu_Report_{datetime.datetime.now().strftime('%m%d_%H%M')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
