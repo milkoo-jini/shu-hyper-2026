@@ -4,13 +4,13 @@ import datetime, re, time, requests, io
 from bs4 import BeautifulSoup
 import pytz
 
-# --- [1. 수집 엔진: 11개 채널 통합 및 명칭 직관화] ---
+# --- [1. SHU HYPER ENGINE: 로직 무결성 유지] ---
 class ShuHyperMonitorWeb:
     def __init__(self):
         self.naver_id = st.secrets["NAVER_ID"]
         self.naver_secret = st.secrets["NAVER_SECRET"]
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        self.fixed_topics = ["북중미 월드컵", "2026 지방선거"]
+        self.fixed_topics = ["월드컵", "지방선거"]
         self.risk_keywords = ["논란", "비판", "폭로", "의혹", "사기", "피해", "수사", "연패", "경질", "공천", "중계권", "충격", "속보"]
         self.exclude_ad_keywords = ["변호사", "법무법인", "무료상담", "승소", "마케팅", "홍보","기고"]
         self.korea_tz = pytz.timezone('Asia/Seoul')
@@ -26,8 +26,7 @@ class ShuHyperMonitorWeb:
             'NATE': '🔴 네이트 이슈',
             'ZUM': '🔵 줌 실검',
             'FMKOREA': '⚽ 에펨코리아(베스트)',
-            'DCINSIDE': '🖼️ 디시인사이드',
-            'FIXED': '📍 고정관제'
+            'DCINSIDE': '🖼️ 디시인사이드'
         }
         return mapping.get(raw_src, raw_src)
 
@@ -36,54 +35,36 @@ class ShuHyperMonitorWeb:
         h = {'X-Naver-Client-Id': self.naver_id, 'X-Naver-Client-Secret': self.naver_secret}
         
         try:
-            # 1. 네이버 최신 (실시간 뉴스)
+            # 1~2. 네이버 (최신/정확)
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
             pool.extend([{'src': self.get_friendly_name('NAVER_DATE'), 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_date.get('items', [])])
-            
-            # 2. 네이버 정확도 (주요 이슈)
             n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=15&sort=sim", headers=h).json()
             pool.extend([{'src': self.get_friendly_name('NAVER_SIM'), 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_sim.get('items', [])])
             
-            # 3. 고정 주제 관제 (월드컵, 선거 등)
+            # 3. 고정 주제
             for t in self.fixed_topics:
                 t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=20&sort=date", headers=h).json()
                 pool.extend([{'src': f'📍 고정관제({t})', 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in t_n.get('items', [])])
 
-            # 4. 시그널 실시간
+            # 4~11. 기타 채널 (SIGNAL, NATE, ZUM, G-TRENDS, DAUM, G-NEWS, FMKOREA, DC)
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
             pool.extend([{'src': self.get_friendly_name('SIGNAL'), 'kw': i['keyword'], 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
-
-            # 5. 네이트 이슈업
             nate = requests.get("https://news.nate.com/edit/issueup/", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('NATE'), 'kw': a.text.strip(), 'url': 'https://news.nate.com'+a['href']} for a in BeautifulSoup(nate.text, 'html.parser').select('.txt_tit')[:10]])
-
-            # 6. 줌 이슈
             zum = requests.get("https://zum.com/#!/home", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('ZUM'), 'kw': a.text.strip(), 'url': f"https://search.zum.com/search.zum?query={a.text.strip()}"} for a in BeautifulSoup(zum.text, 'html.parser').select('.issue_keyword .txt')[:10]])
-
-            # 7. 구글 트렌드
             g_trends = requests.get("https://trends.google.com/trending/rss?geo=KR", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('G_TRENDS'), 'kw': i.title.text, 'url': i.link.text} for i in BeautifulSoup(g_trends.text, 'xml').find_all('item')[:10]])
-
-            # 8. 다음 인기기사
             d_res = requests.get("https://news.daum.net/ranking/popular", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('DAUM'), 'kw': a.text.strip(), 'url': a['href']} for a in BeautifulSoup(d_res.text, 'html.parser').select('.link_txt')[:20]])
-
-            # 9. 구글 뉴스
             g_news = requests.get("https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('G_NEWS'), 'kw': i.title.text, 'url': i.link.text} for i in BeautifulSoup(g_news.text, 'xml').find_all('item')[:15]])
-
-            # 10. 에펨코리아
             fm = requests.get("https://www.fmkorea.com/best", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('FMKOREA'), 'kw': a.get_text().strip(), 'url': 'https://www.fmkorea.com'+a['href']} for a in BeautifulSoup(fm.text, 'html.parser').select('.title.hotdeal_var8 a')[:15]])
-
-            # 11. 디시인사이드
             dc = requests.get("https://www.dcinside.com/", headers=self.headers)
             pool.extend([{'src': self.get_friendly_name('DCINSIDE'), 'kw': a.get_text().strip(), 'url': a['href']} for a in BeautifulSoup(dc.text, 'html.parser').select('.box_best .list_best li a')[:10]])
-
         except: pass
 
-        # 중복 제거 (전체 뼈대 비교)
         seen, unique_pool = set(), []
         for item in pool:
             skeleton = re.sub(r'\s+', '', item['kw'])
@@ -92,39 +73,43 @@ class ShuHyperMonitorWeb:
                 unique_pool.append(item)
         return unique_pool
 
-# --- [2. Streamlit UI 구성] ---
-st.set_page_config(layout="wide", page_title="실시간 이슈 관제 센터")
+# --- [2. UI 설정: 정렬 및 사이즈 최적화] ---
+st.set_page_config(layout="wide", page_title="실시간 이슈 모니터링")
 
 if 'data' not in st.session_state: st.session_state.data = []
 
 st.title("🛡️ 실시간 이슈 관제 센터")
 
-col_btn, col_search = st.columns([1, 3])
+# [핵심] 줄맞춤(vertical_alignment) 및 컴팩트 비율 설정
+col_btn, col_search, col_spacer = st.columns([1.2, 2.5, 4.5], vertical_alignment="end")
+
 with col_btn:
     if st.button("🚀 전체 채널 스캔", use_container_width=True):
         engine = ShuHyperMonitorWeb()
-        with st.spinner("11개 채널 실시간 수집 중..."):
+        with st.spinner("수집 중..."):
             st.session_state.data = engine.fetch_all_routes()
             st.rerun()
 
 with col_search:
-    search_query = st.text_input("🔍 키워드 검색", "")
+    search_query = st.text_input("🔍 키워드 검색")
+
+st.divider()
 
 if st.session_state.data:
     df_raw = pd.DataFrame(st.session_state.data)
     
-    # 채널 필터 (가로형)
+    # 채널 필터
     all_srcs = ["전체 채널"] + sorted(list(df_raw['src'].unique()))
     selected_source = st.pills("🎯 채널 필터", all_srcs, default="전체 채널")
 
-    # 데이터 필터링 (검색어 + 채널)
+    # 필터링 로직
     f_df = df_raw.copy()
     if search_query:
         f_df = f_df[f_df['kw'].str.contains(search_query, case=False)]
     if selected_source != "전체 채널":
         f_df = f_df[f_df['src'] == selected_source]
 
-    # 화면 표시 데이터 구성
+    # 표시용 DF 가공
     display_df = pd.DataFrame({
         '시각': datetime.datetime.now(pytz.timezone('Asia/Seoul')).strftime('%H:%M'),
         '출처': f_df['src'],
@@ -133,15 +118,19 @@ if st.session_state.data:
         '선택': True
     })
 
-    # [표 출력] - 분류 삭제, 링크 적용, 우측 체크박스
+    # [핵심] 에러 수정 및 컬럼 정렬 (LinkColumn 정규식 적용)
     st.subheader(f"📋 관제 리스트 ({len(display_df)}건)")
     edited_df = st.data_editor(
         display_df,
         column_config={
             "시각": st.column_config.TextColumn("시각", width="small"),
             "출처": st.column_config.TextColumn("출처", width="medium"),
-            "헤드라인": st.column_config.LinkColumn("헤드라인 (클릭 시 이동)", display_text=display_df['제목텍스트'], width="large"),
-            "제목텍스트": None,
+            "헤드라인": st.column_config.LinkColumn(
+                "헤드라인 (클릭 시 이동)", 
+                display_text=r"^.+$", # 에러 해결 포인트
+                width="large"
+            ),
+            "제목텍스트": None, # 화면 숨김
             "선택": st.column_config.CheckboxColumn("조치", default=True)
         },
         column_order=("시각", "출처", "헤드라인", "선택"),
@@ -150,7 +139,7 @@ if st.session_state.data:
         height=600
     )
 
-    # [선택 다운로드]
+    # 선택 다운로드
     selected_rows = edited_df[edited_df['선택'] == True]
     if not selected_rows.empty:
         output = io.BytesIO()
