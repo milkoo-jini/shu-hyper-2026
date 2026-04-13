@@ -255,7 +255,7 @@ class ShuMonitorEngine:
         except:
             pass
 
-        # 6. 구글 뉴스 — 부정 이슈 키워드로 검색
+        # 6. 구글 뉴스 — 부정 이슈 키워드로 검색 (시간 필터 적용)
         for q in ["사건사고 한국", "피해 사기 논란"]:
             try:
                 eq    = urllib.parse.quote(q)
@@ -263,8 +263,17 @@ class ShuMonitorEngine:
                     f"https://news.google.com/rss/search?q={eq}&hl=ko&gl=KR&ceid=KR:ko",
                     headers=self.headers, timeout=5
                 )
+                now = datetime.datetime.now(self.kst)
                 for i in BeautifulSoup(g_res.text, 'xml').find_all('item')[:15]:
                     title = i.title.text
+                    try:
+                        pub = i.pubDate.text[:25].strip()
+                        p_date = datetime.datetime.strptime(pub, '%a, %d %b %Y %H:%M:%S')
+                        p_date = pytz.utc.localize(p_date).astimezone(self.kst)
+                        if (now - p_date).total_seconds() > self.time_limit:
+                            continue
+                    except:
+                        pass
                     if not self._is_excluded(title):
                         pool.append({'src': self.src_mapping['G_NEWS'], 'kw': title, 'desc': '', 'url': i.link.text})
             except:
