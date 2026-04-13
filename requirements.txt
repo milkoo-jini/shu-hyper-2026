@@ -8,3 +8,5 @@ pytz
 xlsxwriter
 scikit-learn
 google-genai
+groq
+tavily-python
