@@ -22,7 +22,7 @@ class ShuMonitorEngine:
             'Referer': 'https://www.google.com/',
         }
         self.kst = pytz.timezone('Asia/Seoul')
-        self.time_limit = 86400 * 1
+        self.time_limit = 86400 * 3
 
         # 고정 주제 (항상 포함)
         self.fixed_topics = ["북중미 월드컵", "지방선거"]
@@ -87,6 +87,7 @@ class ShuMonitorEngine:
             # 기타 노이즈
             "운세", "부고", "인사", "ceo스토리", "기업인사", "인물열전", "who is",
             "주년", "탄생", "e종목", "알부민",
+            "성금", "브리프", "이야기", "브리핑", "인터뷰", "인물", "論하다", "기업家", "겜덕", "이모저모", "세미나", "강원소방", "지휘관 회의",
         ]
         self.exclude_entertainment = [
             # 방송·연예 가십 (방송 출연해서 한 말, 근황 등)
@@ -282,7 +283,7 @@ class ShuMonitorEngine:
             text = re.sub(r'[^\w\s]', ' ', text)
             return set(w for w in text.split() if len(w) >= 2)
 
-        def is_similar(tokens_a, tokens_b, threshold=0.5):
+        def is_similar(tokens_a, tokens_b, threshold=0.8):
             if not tokens_a or not tokens_b:
                 return False
             intersection = tokens_a & tokens_b
