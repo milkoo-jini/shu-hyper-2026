@@ -80,7 +80,7 @@ def run_keyword():
 
     st.markdown("## 🎯 리스크 키워드 확장")
     st.caption("네이버 뉴스 + Gemini Google Search 기반 위험 키워드 발굴")
-    st.divider()
+    st.markdown("<hr style='margin: 0.5rem 0; border: none; border-top: 1px solid rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
 
     col_input, col_output = st.columns([1, 2], gap="large")
 
