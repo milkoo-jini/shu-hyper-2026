@@ -47,8 +47,7 @@ class ShuMonitorEngine:
                     p_date = datetime.datetime.strptime(i['pubDate'], '%a, %d %b %Y %H:%M:%S +0900').replace(tzinfo=kst)
                     title = BeautifulSoup(i['title'], 'html.parser').get_text()
                     desc = i.get('description', '')
-                    desc_text = BeautifulSoup(desc, 'html.parser').get_text()
-                    target_text = (title + desc_text).lower().replace(' ', '')
+                    target_text = (title + desc).lower().replace(' ', '')
                     if (now - p_date).total_seconds() < self.time_limit:
                         # [핵심] 고정 주제도 여기서 걸러집니다
                         if not any(ex.replace(' ', '').lower() in target_text for ex in self.total_exclude):
@@ -84,8 +83,6 @@ class ShuMonitorEngine:
                                 pool.append({'src': self.src_mapping[target], 'kw': i.title.text, 'desc': '', 'url': i.link.text})
                     except: pass
             
-            # ✅ 수정 2: generic_fetch가 self.total_exclude를 클로저로 캡처하도록 유지
-            # (fetch_all_routes 안에 있으므로 self 접근 가능)
             def generic_fetch(url, selector, label, base_url=""):
                 res = requests.get(url, headers=self.headers)
                 soup = BeautifulSoup(res.text, 'html.parser')
@@ -93,10 +90,7 @@ class ShuMonitorEngine:
                 out = []
                 for a in items:
                     title = a.text.strip()
-                    if title and not any(
-                        ex.replace(' ', '').lower() in title.lower().replace(' ', '')
-                        for ex in self.total_exclude
-                    ):
+                    if not any(ex.replace(' ', '').lower() in title.lower().replace(' ', '') for ex in self.total_exclude):
                         link = a.get('href')
                         if link and not link.startswith('http'): link = base_url + link
                         out.append({'src': label, 'kw': title, 'desc': '', 'url': link})
@@ -116,19 +110,15 @@ class ShuMonitorEngine:
         return sorted(unique_pool, key=lambda x: 0 if '이슈' in x['src'] or '🔥' in x['src'] else 1)
 
 def run_monitor():
-    # ✅ 수정 1: 헤더 짤림 방지 - 고정값 제거, 숨길 요소 추가
+    # 상단 가려짐 방지 강화 CSS
     st.markdown("""
         <style>
-            [data-testid="stHeader"],
-            [data-testid="stDecoration"],
-            [data-testid="stToolbar"],
-            header[data-testid="stHeader"] { 
-                display: none !important;
-                height: 0 !important;
+            [data-testid="stHeader"], [data-testid="stDecoration"] { 
+                display: none !important; 
             }
             .main .block-container {
-                margin-top: 1rem !important;
-                padding-top: 1rem !important;
+                margin-top: 150px !important;
+                padding-top: 0px !important;
                 max-width: 95% !important;
             }
             .status-badge { 
@@ -193,5 +183,4 @@ def run_monitor():
             st.download_button(label="📊 선택 항목 엑셀 추출", data=output.getvalue(), file_name="Shu_Issue_Report.xlsx", use_container_width=True)
 
 if __name__ == "__main__":
-    st.set_page_config(layout="wide", page_title="Shu Monitor")
     run_monitor()
