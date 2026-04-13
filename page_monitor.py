@@ -86,7 +86,7 @@ class ShuMonitorEngine:
             "칼럼", "사설", "기고", "기자시각", "독자투고",
             # 기타 노이즈
             "운세", "부고", "인사", "ceo스토리", "기업인사", "인물열전", "who is",
-            "주년", "탄생", "e종목", "알부민",
+            "주년", "탄생", "e종목",
             "성금", "브리프", "이야기", "브리핑", "인터뷰", "인물", "論하다", "기업家", "겜덕", "이모저모", "세미나", "강원소방", "지휘관 회의",
         ]
         self.exclude_entertainment = [
@@ -277,11 +277,22 @@ class ShuMonitorEngine:
         # 9. 에펨·디시·시그널·줌은 Streamlit Cloud에서 IP 차단되어 수집 불가
         # 추후 로컬 환경에서만 사용하거나 API 대체 필요
 
-        # 중복 제거 — 완전 일치 + 공통 단어 비율 기반 유사 중복 제거
+        # 중복 제거 — 완전 일치 + 고유명사/수치 기반 + 공통 단어 비율
         def tokenize(text):
-            # 조사·특수문자 제거 후 2글자 이상 단어만 추출
             text = re.sub(r'[^\w\s]', ' ', text)
             return set(w for w in text.split() if len(w) >= 2)
+
+        def extract_key_tokens(text):
+            # 고유명사(대문자 포함 단어, 숫자 포함 단어), 3글자 이상 단어 추출
+            text = re.sub(r'[^\w\s]', ' ', text)
+            tokens = text.split()
+            key = set()
+            for w in tokens:
+                if len(w) >= 3:
+                    key.add(w)
+                if re.search(r'[0-9]', w):  # 수치 포함 단어 (900만원 등)
+                    key.add(w)
+            return key
 
         def is_similar(tokens_a, tokens_b, threshold=0.8):
             if not tokens_a or not tokens_b:
@@ -290,8 +301,15 @@ class ShuMonitorEngine:
             smaller = min(len(tokens_a), len(tokens_b))
             return len(intersection) / smaller >= threshold
 
+        def is_key_duplicate(key_a, key_b):
+            # 고유명사/수치 3개 이상 겹치면 중복
+            if not key_a or not key_b:
+                return False
+            return len(key_a & key_b) >= 3
+
         seen_exact = set()
         seen_tokens = []
+        seen_keys = []
         unique_pool = []
         for item in pool:
             # 1단계: 완전 일치 제거
@@ -299,7 +317,12 @@ class ShuMonitorEngine:
             if exact in seen_exact:
                 continue
             seen_exact.add(exact)
-            # 2단계: 공통 단어 비율 기반 유사 중복 제거
+            # 2단계: 고유명사·수치 기반 중복 제거 (HL홀딩스+공정위+900만원 등)
+            key_tokens = extract_key_tokens(item['kw'])
+            if any(is_key_duplicate(key_tokens, prev) for prev in seen_keys):
+                continue
+            seen_keys.append(key_tokens)
+            # 3단계: 공통 단어 비율 기반 유사 중복 제거
             tokens = tokenize(item['kw'])
             if any(is_similar(tokens, prev) for prev in seen_tokens):
                 continue
