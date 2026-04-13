@@ -36,7 +36,7 @@ class ShuMonitorEngine:
                 src_name = f"⚽ {t}" if t == "월드컵" else f"🗳️ {t} 이슈"
                 pool.extend([{'src': src_name, 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'desc': i.get('description', ''), 'url': i['link']} for i in t_n.get('items', [])])
             
-            # 11개 채널 수집 로직 (유지)
+            # 11개 채널 수집 로직 유지
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
             pool.extend([{'src': self.src_mapping['SIGNAL'], 'kw': i['keyword'], 'desc': '', 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
             nate = requests.get("https://news.nate.com/edit/issueup/", headers=self.headers)
@@ -64,83 +64,35 @@ class ShuMonitorEngine:
                 seen.add(skel); unique_pool.append(item)
         return sorted(unique_pool, key=lambda x: 0 if x['src'] in ['⚽ 월드컵', '🗳️ 지방선거 이슈'] else 1)
 
-# --- [UI: 정밀 스타일링 및 박스 필터 적용] ---
+# --- [UI: 스타일 정돈] ---
 st.set_page_config(layout="wide", page_title="이슈 모니터링")
 st.markdown("""<style>
     .block-container { padding-top: 1.5rem !important; }
-    /* 컨트롤 영역 박스화 */
-    .control-panel { 
-        background-color: #f8f9fc; 
-        border: 1px solid #e3e6f0; 
-        border-radius: 10px; 
-        padding: 1.2rem; 
-        margin-bottom: 1.5rem; 
-    }
-    .stTextInput > div > div > input { height: 2.6rem !important; border-radius: 8px !important; border: 1px solid #d1d3e2 !important; }
-    .stButton > button { height: 2.6rem !important; font-weight: 700 !important; border-radius: 8px !important; }
-    .status-box { background-color: #ffffff; border: 1px solid #e3e6f0; border-radius: 8px; padding: 0.5rem; text-align: center; color: #4e73df; font-weight: 800; height: 2.6rem; line-height: 1.5rem; }
-    h3 { margin-top: -5px !important; margin-bottom: 10px !important; color: #2e59d9; font-size: 1.6rem !important; }
-    hr { margin: 1rem 0 !important; opacity: 0.3; }
+    .stTextInput > div > div > input { height: 2.5rem !important; border-radius: 6px !important; }
+    .stButton > button { height: 2.5rem !important; font-weight: 700 !important; border-radius: 6px !important; }
+    .status-badge { background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px; padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold; height: 2.5rem; line-height: 1.5rem; }
+    h3 { margin-top: -10px !important; margin-bottom: 5px !important; color: #1e3a8a; font-size: 1.5rem !important; }
+    hr { margin: 1.2rem 0 !important; border-top: 1px solid #eee !important; }
     #MainMenu, header {visibility: hidden;}
 </style>""", unsafe_allow_html=True)
 
 if 'data_pool' not in st.session_state: st.session_state.data_pool = []
 if 'editor_key' not in st.session_state: st.session_state.editor_key = 0
 
-# [상단 박스 영역 시작]
-with st.container():
-    st.markdown('<div class="control-panel">', unsafe_allow_html=True)
-    
-    # 1층: 타이틀 및 주요 도구
-    c1, c2, c3, c4 = st.columns([2.5, 1, 1.2, 0.8])
-    with c1: st.markdown("### 🛡️ ISSUE COMMAND CENTER")
-    with c2:
-        if st.button("🚀 실시간 통합 스캔", use_container_width=True):
-            st.session_state.data_pool = [dict(d, 선택=True) for d in ShuMonitorEngine().fetch_all_routes()]
-            st.session_state.editor_key += 1; st.rerun()
-    with c3: filter_query = st.text_input("", placeholder="🔍 결과 내 키워드 필터링", label_visibility="collapsed")
-    with c4:
-        count = len(st.session_state.data_pool)
-        st.markdown(f"<div class='status-box'>{count} 건</div>", unsafe_allow_html=True)
+# 상단 컨트롤 영역
+c1, c2, c3, c4 = st.columns([2.5, 1, 1, 0.8])
+with c1: st.markdown("### 🔍 실시간 이슈 모니터링")
+with c2:
+    if st.button("🚀 전체 채널 스캔", use_container_width=True):
+        st.session_state.data_pool = [dict(d, 선택=True) for d in ShuMonitorEngine().fetch_all_routes()]
+        st.session_state.editor_key += 1; st.rerun()
+with c3: filter_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
+with c4:
+    count = len(st.session_state.data_pool)
+    st.markdown(f"<div class='status-badge'>{count} 건</div>", unsafe_allow_html=True)
 
-    # 2층: 미세 조정 버튼 (색감을 연하게 배경과 분리)
-    _, b1, b2 = st.columns([8.2, 0.9, 0.9])
-    with b1:
-        if st.button("전체선택", use_container_width=True, help="모든 항목 체크"):
-            for item in st.session_state.data_pool: item['선택'] = True
-            st.session_state.editor_key += 1; st.rerun()
-    with b2:
-        if st.button("선택해제", use_container_width=True, help="모든 체크 해제"):
-            for item in st.session_state.data_pool: item['선택'] = False
-            st.session_state.editor_key += 1; st.rerun()
-            
-    st.markdown('</div>', unsafe_allow_html=True)
-# [상단 박스 영역 종료]
-
-# [데이터 리스트 영역]
-if st.session_state.data_pool:
-    df = pd.DataFrame(st.session_state.data_pool)
-    if filter_query: df = df[df['kw'].str.contains(filter_query, case=False)]
-    
-    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
-    df['수집시점'] = now.strftime('%-m/%-d %H:%M')
-
-    # 데이터 에디터 (폭 85-65-65-65 엄수)
-    edited_df = st.data_editor(
-        df,
-        column_config={
-            "수집시점": st.column_config.TextColumn("수집시점", width=85),
-            "src": st.column_config.TextColumn("출처", width=65),
-            "kw": st.column_config.TextColumn("이슈 헤드라인 전문", width="large"),
-            "url": st.column_config.LinkColumn("원문", display_text="🔗", width=65),
-            "선택": st.column_config.CheckboxColumn("선택", width=65)
-        },
-        column_order=("수집시점", "src", "kw", "url", "선택"),
-        hide_index=True, use_container_width=True, key=f"editor_{st.session_state.editor_key}"
-    )
-
-    # 엑셀 다운로드 (하단 배치)
-    if not edited_df[edited_df['선택'] == True].empty:
-        output = io.BytesIO()
-        edited_df[edited_df['선택'] == True].drop(columns=['선택']).to_excel(output, index=False)
-        st.download_button(label="📊 선택 항목 엑셀 리포트 생성", data=output.getvalue(), file_name="Shu_Issue_Report.xlsx", use_container_width=True)
+# 보조 버튼
+_, b1, b2 = st.columns([8.2, 0.9, 0.9])
+with b1:
+    if st.button("전체선택", use_container_width=True):
+        for item in st.session_state.data_pool:
