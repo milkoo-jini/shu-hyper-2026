@@ -12,10 +12,10 @@ class ShuMonitorEngine:
         except:
             self.naver_id = self.naver_secret = None
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        # 고정 주제 2개 (월드컵, 지방선거)
+        # 진짜 고정 주제 2개
         self.fixed_topics = ["월드컵", "지방선거"]
         
-        # [확정] 슈 님 지정 출처 명칭 매핑
+        # [확정] 슈 님 지정 출처 명칭 10선
         self.src_mapping = {
             'NAVER_DATE': '⏱️ 실시간 뉴스', 
             'NAVER_SIM': '📢 주요 이슈(네이버)',
@@ -33,16 +33,16 @@ class ShuMonitorEngine:
         pool = []
         h = {'X-Naver-Client-Id': self.naver_id, 'X-Naver-Client-Secret': self.naver_secret}
         try:
-            # 1. 네이버 뉴스 (SIM/DATE)
+            # 1. 네이버 (SIM/DATE)
             n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=15&sort=sim", headers=h).json()
             pool.extend([{'src': self.src_mapping['NAVER_SIM'], 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_sim.get('items', [])])
             
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
             pool.extend([{'src': self.src_mapping['NAVER_DATE'], 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_date.get('items', [])])
             
-            # 2. 고정 주제 (월드컵, 지방선거)
+            # 2. 고정 주제
             for t in self.fixed_topics:
-                t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=20&sort=date", headers=h).json()
+                t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=25&sort=date", headers=h).json()
                 pool.extend([{'src': f'🔥 {t}', 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in t_n.get('items', [])])
             
             # 3. 시그널
@@ -53,7 +53,7 @@ class ShuMonitorEngine:
             nate = requests.get("https://news.nate.com/edit/issueup/", headers=self.headers)
             pool.extend([{'src': self.src_mapping['NATE'], 'kw': a.text.strip(), 'url': "https://news.nate.com/edit/issueup/"} for a in BeautifulSoup(nate.text, 'html.parser').select('.txt_tit')[:10]])
             
-            # 5. 줌 (ZUM)
+            # 5. 줌
             zum = requests.get("https://zum.com/#!/home", headers=self.headers)
             pool.extend([{'src': self.src_mapping['ZUM'], 'kw': a.text.strip(), 'url': "https://zum.com/"} for a in BeautifulSoup(zum.text, 'html.parser').select('.issue_keyword .txt')[:10]])
             
@@ -77,8 +77,7 @@ class ShuMonitorEngine:
             dc = requests.get("https://www.dcinside.com/", headers=self.headers)
             pool.extend([{'src': self.src_mapping['DCINSIDE'], 'kw': a.get_text().strip(), 'url': a.get('href')} for a in BeautifulSoup(dc.text, 'html.parser').select('.box_best .list_best li a')[:15]])
 
-        except Exception as e:
-            st.warning(f"수집 엔진 확인 필요: {e}")
+        except: pass
         
         seen, unique_pool = set(), []
         for item in pool:
@@ -87,7 +86,7 @@ class ShuMonitorEngine:
                 seen.add(skel); unique_pool.append(item)
         return sorted(unique_pool, key=lambda x: 0 if '🔥' in x['src'] else 1)
 
-# --- [UI 레이아웃: 전문 관제 대시보드 스타일] ---
+# --- [UI: 정렬 및 규격 고정] ---
 st.set_page_config(layout="wide", page_title="이슈 모니터링")
 st.markdown("""<style>
     .block-container { padding-top: 1.5rem !important; }
@@ -101,7 +100,7 @@ st.markdown("""<style>
 if 'data_pool' not in st.session_state: st.session_state.data_pool = []
 if 'editor_key' not in st.session_state: st.session_state.editor_key = 0
 
-# 상단 1라인
+# 상단 1라인: 타이틀 및 핵심 컨트롤
 c1, c2, c3, c4 = st.columns([2, 1, 1, 1.2])
 with c1: st.markdown("### 🛡️ 실시간 이슈 모니터링")
 with c2:
@@ -113,7 +112,7 @@ with c4:
     count = len(st.session_state.data_pool)
     st.markdown(f"<div class='status-box'>📊 {count}개 이슈 감지</div>", unsafe_allow_html=True)
 
-# 상단 2라인
+# 상단 2라인: 전체선택/해제 (우측 정렬)
 _, b1, b2 = st.columns([8.2, 0.9, 0.9])
 with b1:
     if st.button("전체선택", use_container_width=True):
@@ -124,11 +123,14 @@ with b2:
         for item in st.session_state.data_pool: item['선택'] = False
         st.session_state.editor_key += 1; st.rerun()
 
-# 데이터 표 (폭 규격 엄수: 85-65-65-65)
+# [중앙 데이터] 규격 85-65-65-65 엄수 및 수집시점 교정
 if st.session_state.data_pool:
     df = pd.DataFrame(st.session_state.data_pool)
     if filter_query: df = df[df['kw'].str.contains(filter_query, case=False)]
-    df['수집시점'] = datetime.datetime.now(pytz.timezone('Asia/Seoul')).strftime('%H:%M')
+    
+    # [수정] 월/일 시:분 형식 고정 (예: 4/13 09:10)
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+    df['수집시점'] = now.strftime('%-m/%-d %H:%M')
 
     edited_df = st.data_editor(
         df,
