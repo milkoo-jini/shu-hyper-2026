@@ -32,6 +32,8 @@ class ShuMonitorEngine:
         # 네이버는 업무 관련 + 사건사고 위주로만
         self.naver_queries = [
             # 업무 핵심 — 플랫폼·이커머스 제재
+            "신종사기 적발",
+            "공정위 적발",
             "허위광고 적발",
             "다크패턴",
             # 업무 핵심 — 식의약품
@@ -274,13 +276,20 @@ class ShuMonitorEngine:
         # 9. 에펨·디시·시그널·줌은 Streamlit Cloud에서 IP 차단되어 수집 불가
         # 추후 로컬 환경에서만 사용하거나 API 대체 필요
 
-        # 중복 제거
-        seen, unique_pool = set(), []
+        # 중복 제거 — 완전 일치 + 핵심 키워드 유사 중복 제거
+        seen_exact, seen_fuzzy, unique_pool = set(), set(), []
         for item in pool:
-            skel = re.sub(r'\s+', '', item['kw'])
-            if skel not in seen:
-                seen.add(skel)
-                unique_pool.append(item)
+            # 1단계: 완전 일치 제거
+            exact = re.sub(r'\s+', '', item['kw'])
+            if exact in seen_exact:
+                continue
+            seen_exact.add(exact)
+            # 2단계: 조사·특수문자 제거 후 앞 12글자 유사 중복 제거
+            fuzzy = re.sub(r'[^\w]', '', item['kw'])[:12]
+            if fuzzy and fuzzy in seen_fuzzy:
+                continue
+            seen_fuzzy.add(fuzzy)
+            unique_pool.append(item)
 
         # 정렬: 고정주제(🔥) 1순위 > 네이버 실시간(⏱️) 2순위 > 나머지
         def sort_key(x):
