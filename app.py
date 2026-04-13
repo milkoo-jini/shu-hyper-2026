@@ -36,7 +36,6 @@ class ShuMonitorEngine:
                 src_name = f"⚽ {t}" if t == "월드컵" else f"🗳️ {t} 이슈"
                 pool.extend([{'src': src_name, 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'desc': i.get('description', ''), 'url': i['link']} for i in t_n.get('items', [])])
             
-            # 11개 채널 수집 로직 유지
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
             pool.extend([{'src': self.src_mapping['SIGNAL'], 'kw': i['keyword'], 'desc': '', 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
             nate = requests.get("https://news.nate.com/edit/issueup/", headers=self.headers)
@@ -64,7 +63,7 @@ class ShuMonitorEngine:
                 seen.add(skel); unique_pool.append(item)
         return sorted(unique_pool, key=lambda x: 0 if x['src'] in ['⚽ 월드컵', '🗳️ 지방선거 이슈'] else 1)
 
-# --- [UI: 스타일 정돈] ---
+# --- [UI: 스타일 및 레이아웃] ---
 st.set_page_config(layout="wide", page_title="이슈 모니터링")
 st.markdown("""<style>
     .block-container { padding-top: 1.5rem !important; }
@@ -95,4 +94,39 @@ with c4:
 _, b1, b2 = st.columns([8.2, 0.9, 0.9])
 with b1:
     if st.button("전체선택", use_container_width=True):
-        for item in st.session_state.data_pool:
+        for item in st.session_state.data_pool: 
+            item['선택'] = True
+        st.session_state.editor_key += 1; st.rerun()
+with b2:
+    if st.button("선택해제", use_container_width=True):
+        for item in st.session_state.data_pool: 
+            item['선택'] = False
+        st.session_state.editor_key += 1; st.rerun()
+
+st.markdown("---")
+
+# 데이터 리스트 영역
+if st.session_state.data_pool:
+    df = pd.DataFrame(st.session_state.data_pool)
+    if filter_query: df = df[df['kw'].str.contains(filter_query, case=False)]
+    
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+    df['수집시점'] = now.strftime('%-m/%-d %H:%M')
+
+    edited_df = st.data_editor(
+        df,
+        column_config={
+            "수집시점": st.column_config.TextColumn("수집시점", width=85),
+            "src": st.column_config.TextColumn("출처", width=65),
+            "kw": st.column_config.TextColumn("이슈 헤드라인 전문", width="large"),
+            "url": st.column_config.LinkColumn("원문", display_text="🔗", width=65),
+            "선택": st.column_config.CheckboxColumn("선택", width=65)
+        },
+        column_order=("수집시점", "src", "kw", "url", "선택"),
+        hide_index=True, use_container_width=True, key=f"editor_{st.session_state.editor_key}"
+    )
+
+    if not edited_df[edited_df['선택'] == True].empty:
+        output = io.BytesIO()
+        edited_df[edited_df['선택'] == True].drop(columns=['선택']).to_excel(output, index=False)
+        st.download_button(label="📊 선택 항목 엑셀 추출", data=output.getvalue(), file_name="Shu_Issue_Report.xlsx", use_container_width=True)
