@@ -12,10 +12,9 @@ class ShuMonitorEngine:
         except:
             self.naver_id = self.naver_secret = None
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        # 고정 주제
         self.fixed_topics = ["월드컵", "지방선거"]
         
-        # [확정] 슈 님 지정 출처 명칭 매핑
+        # [확정] 슈 님 지정 출처 명칭 10선
         self.src_mapping = {
             'NAVER_DATE': '⏱️ 실시간 뉴스', 
             'NAVER_SIM': '📢 주요 이슈(네이버)',
@@ -34,62 +33,64 @@ class ShuMonitorEngine:
         h = {'X-Naver-Client-Id': self.naver_id, 'X-Naver-Client-Secret': self.naver_secret}
         try:
             # 1. 네이버 (SIM/DATE)
-            n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=15&sort=sim", headers=h).json()
-            pool.extend([{'src': self.src_mapping['NAVER_SIM'], 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_sim.get('items', [])])
-            
+            n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=20&sort=sim", headers=h).json()
+            pool.extend([{'src': self.src_mapping['NAVER_SIM'], 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'desc': i.get('description', ''), 'url': i['link']} for i in n_sim.get('items', [])])
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
-            pool.extend([{'src': self.src_mapping['NAVER_DATE'], 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in n_date.get('items', [])])
+            pool.extend([{'src': self.src_mapping['NAVER_DATE'], 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'desc': i.get('description', ''), 'url': i['link']} for i in n_date.get('items', [])])
             
-            # 2. 고정 주제 (명칭 슈 님 스타일로 교정)
+            # 2. 고정 주제
             for t in self.fixed_topics:
                 t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=25&sort=date", headers=h).json()
-                # 월드컵 -> ⚽ 실시간 월드컵 / 지방선거 -> 🗳️ 지방선거 이슈
                 src_name = f"⚽ {t}" if t == "월드컵" else f"🗳️ {t} 이슈"
-                pool.extend([{'src': src_name, 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'url': i['link']} for i in t_n.get('items', [])])
+                pool.extend([{'src': src_name, 'kw': BeautifulSoup(i['title'], 'html.parser').get_text(), 'desc': i.get('description', ''), 'url': i['link']} for i in t_n.get('items', [])])
             
-            # 3. 시그널
+            # 3~11. 기타 채널 (SIGNAL, NATE, ZUM, G-TRENDS, DAUM, G-NEWS, FMKOREA, DCINSIDE)
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
-            pool.extend([{'src': self.src_mapping['SIGNAL'], 'kw': i['keyword'], 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
+            pool.extend([{'src': self.src_mapping['SIGNAL'], 'kw': i['keyword'], 'desc': '', 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
             
-            # 4. 네이트
             nate = requests.get("https://news.nate.com/edit/issueup/", headers=self.headers)
-            pool.extend([{'src': self.src_mapping['NATE'], 'kw': a.text.strip(), 'url': "https://news.nate.com/edit/issueup/"} for a in BeautifulSoup(nate.text, 'html.parser').select('.txt_tit')[:10]])
+            pool.extend([{'src': self.src_mapping['NATE'], 'kw': a.text.strip(), 'desc': '', 'url': "https://news.nate.com/edit/issueup/"} for a in BeautifulSoup(nate.text, 'html.parser').select('.txt_tit')[:10]])
             
-            # 5. 줌
             zum = requests.get("https://zum.com/#!/home", headers=self.headers)
-            pool.extend([{'src': self.src_mapping['ZUM'], 'kw': a.text.strip(), 'url': "https://zum.com/"} for a in BeautifulSoup(zum.text, 'html.parser').select('.issue_keyword .txt')[:10]])
+            pool.extend([{'src': self.src_mapping['ZUM'], 'kw': a.text.strip(), 'desc': '', 'url': "https://zum.com/"} for a in BeautifulSoup(zum.text, 'html.parser').select('.issue_keyword .txt')[:10]])
             
-            # 6. 구글 트렌드
             g_trends = requests.get("https://trends.google.com/trending/rss?geo=KR", headers=self.headers)
-            pool.extend([{'src': self.src_mapping['G_TRENDS'], 'kw': i.title.text, 'url': i.link.text if i.link else ""} for i in BeautifulSoup(g_trends.text, 'xml').find_all('item')[:10]])
+            pool.extend([{'src': self.src_mapping['G_TRENDS'], 'kw': i.title.text, 'desc': '', 'url': i.link.text if i.link else ""} for i in BeautifulSoup(g_trends.text, 'xml').find_all('item')[:10]])
             
-            # 7. 다음
             d_res = requests.get("https://news.daum.net/ranking/popular", headers=self.headers)
-            pool.extend([{'src': self.src_mapping['DAUM'], 'kw': a.text.strip(), 'url': a.get('href')} for a in BeautifulSoup(d_res.text, 'html.parser').select('.link_txt')[:30]])
+            pool.extend([{'src': self.src_mapping['DAUM'], 'kw': a.text.strip(), 'desc': '', 'url': a.get('href')} for a in BeautifulSoup(d_res.text, 'html.parser').select('.link_txt')[:30]])
             
-            # 8. 구글 뉴스
             g_news = requests.get("https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko", headers=self.headers)
-            pool.extend([{'src': self.src_mapping['G_NEWS'], 'kw': i.title.text, 'url': i.link.text} for i in BeautifulSoup(g_news.text, 'xml').find_all('item')[:15]])
+            pool.extend([{'src': self.src_mapping['G_NEWS'], 'kw': i.title.text, 'desc': '', 'url': i.link.text} for i in BeautifulSoup(g_news.text, 'xml').find_all('item')[:15]])
             
-            # 9. 에펨코리아
             fm = requests.get("https://www.fmkorea.com/best", headers=self.headers)
-            pool.extend([{'src': self.src_mapping['FMKOREA'], 'kw': a.get_text().strip(), 'url': 'https://www.fmkorea.com' + a.get('href')} for a in BeautifulSoup(fm.text, 'html.parser').select('.title.hotdeal_var8 a')[:20]])
+            pool.extend([{'src': self.src_mapping['FMKOREA'], 'kw': a.get_text().strip(), 'desc': '', 'url': 'https://www.fmkorea.com' + a.get('href')} for a in BeautifulSoup(fm.text, 'html.parser').select('.title.hotdeal_var8 a')[:20]])
             
-            # 10. 디시인사이드
             dc = requests.get("https://www.dcinside.com/", headers=self.headers)
-            pool.extend([{'src': self.src_mapping['DCINSIDE'], 'kw': a.get_text().strip(), 'url': a.get('href')} for a in BeautifulSoup(dc.text, 'html.parser').select('.box_best .list_best li a')[:15]])
+            pool.extend([{'src': self.src_mapping['DCINSIDE'], 'kw': a.get_text().strip(), 'desc': '', 'url': a.get('href')} for a in BeautifulSoup(dc.text, 'html.parser').select('.box_best .list_best li a')[:15]])
 
         except: pass
+        
+        # [정밀 필터링] 연예 가십 + 방송 홍보 + 과거 회상형 기사 제외
+        exclude_kws = [
+            '방송', '출연', '방영', '예능', '드라마', '본방', '시청률', 'MC', 
+            '컴백', '데뷔', '무대', '가수', '아이돌', '솔로', '앨범', '차트',
+            '관객수', '박스오피스', '영화관', '개봉', '제작보고회',
+            '회상했다', '회고', '당시', '과거', '추억', '인터뷰', '성공 비결'
+        ]
         
         seen, unique_pool = set(), []
         for item in pool:
             skel = re.sub(r'\s+', '', item['kw'])
+            full_text = (item['kw'] + item.get('desc', '')).replace(' ', '')
+            
             if skel not in seen:
-                seen.add(skel); unique_pool.append(item)
-        # 고정주제(이모지 포함된 것) 최상단 정렬
+                if not any(ex in full_text for ex in exclude_kws):
+                    seen.add(skel); unique_pool.append(item)
+                
         return sorted(unique_pool, key=lambda x: 0 if x['src'] in ['⚽ 월드컵', '🗳️ 지방선거 이슈'] else 1)
 
-# --- [UI 레이아웃: 정렬 및 규격 고정] ---
+# --- [UI: 정렬 및 규격 고정] ---
 st.set_page_config(layout="wide", page_title="이슈 모니터링")
 st.markdown("""<style>
     .block-container { padding-top: 1.5rem !important; }
@@ -103,7 +104,7 @@ st.markdown("""<style>
 if 'data_pool' not in st.session_state: st.session_state.data_pool = []
 if 'editor_key' not in st.session_state: st.session_state.editor_key = 0
 
-# 상단 컨트롤바
+# 상단 컨트롤
 c1, c2, c3, c4 = st.columns([2, 1, 1, 1.2])
 with c1: st.markdown("### 🛡️ 실시간 이슈 모니터링")
 with c2:
@@ -115,7 +116,6 @@ with c4:
     count = len(st.session_state.data_pool)
     st.markdown(f"<div class='status-box'>📊 {count}개 이슈 감지</div>", unsafe_allow_html=True)
 
-# 선택 버튼 (우측 정렬)
 _, b1, b2 = st.columns([8.2, 0.9, 0.9])
 with b1:
     if st.button("전체선택", use_container_width=True):
@@ -126,14 +126,13 @@ with b2:
         for item in st.session_state.data_pool: item['선택'] = False
         st.session_state.editor_key += 1; st.rerun()
 
-# [중앙 데이터] 규격 85-65-65-65 엄수 및 수집시점(월/일 포함) 교정
+# [중앙 데이터] 규격 85-65-65-65 및 수집시점 형식 엄수
 if st.session_state.data_pool:
     df = pd.DataFrame(st.session_state.data_pool)
     if filter_query: df = df[df['kw'].str.contains(filter_query, case=False)]
     
-    # [교정] 월/일 시:분 형식 (예: 4/13 09:10)
     now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
-    df['수집시점'] = now.strftime('%-m/%-d %H:%M')
+    df['수집시점'] = now.strftime('%-m/%-d %H:%M') # 4/13 09:10 형식
 
     edited_df = st.data_editor(
         df,
