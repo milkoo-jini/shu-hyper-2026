@@ -70,6 +70,7 @@ class ShuMonitorEngine:
             # 3. 시그널, 구글 등 기타 채널
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
             pool.extend([{'src': self.src_mapping['SIGNAL'], 'kw': i['keyword'], 'desc': '', 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
+            
             for target in ['G_TRENDS', 'G_NEWS']:
                 url = "https://trends.google.com/trending/rss?geo=KR" if target == 'G_TRENDS' else "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
                 rss = requests.get(url, headers=self.headers)
@@ -80,7 +81,13 @@ class ShuMonitorEngine:
                         p_date = pytz.utc.localize(p_date).astimezone(kst)
                         if (now - p_date).total_seconds() < self.time_limit:
                             if not any(ex.replace(' ', '').lower() in i.title.text.lower().replace(' ', '') for ex in self.total_exclude):
-                                pool.append({'src': self.src_mapping[target], 'kw': i.title.text, 'desc': '', 'url': i.link.text})
+                                # [수정 부분] 구글 트렌드 전용 링크 추출 로직 (XML 에러 방지)
+                                if target == 'G_TRENDS':
+                                    news_item = i.find('ht:news_item_url')
+                                    link = news_item.text if news_item else i.link.text
+                                else:
+                                    link = i.link.text
+                                pool.append({'src': self.src_mapping[target], 'kw': i.title.text, 'desc': '', 'url': link})
                     except: pass
             
             def generic_fetch(url, selector, label, base_url=""):
