@@ -17,7 +17,7 @@ class ShuMonitorEngine:
         # [설정] 수집 범위 72시간
         self.time_limit = 86400 * 3 
         
-        # [필터] 광고/노이즈 키워드 (who 추가)
+        # [필터] 광고/노이즈 키워드 (슈 님의 리스트 그대로 유지)
         self.exclude_ad_keywords = ["Who Is", "who", "인물열전", "CEO스토리", "기업인사", "조언", "상담", "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", "법률사무소", "홍보", "마케팅", "기고"]
         self.base_exclude = ['방송', '출연', '방영', '예능', '드라마', '본방', '시청률', 'MC', '컴백', '데뷔', '무대', '가수', '아이돌', '솔로', '앨범', '차트', '관객수', '박스오피스', '영화관', '개봉', '제작보고회', '회상했다', '회고', '당시', '과거', '추억', '인터뷰', '성공 비결']
         self.total_exclude = list(set(self.base_exclude + self.exclude_ad_keywords))
@@ -44,10 +44,9 @@ class ShuMonitorEngine:
                 res = []
                 for i in items:
                     try:
-                        p_date = datetime.datetime.strptime(i['pubDate'], '%a, %d %b %Y %H:%M:%S +0900').replace(tzinfo=pytz.FixedOffset(540))
+                        p_date = datetime.datetime.strptime(i['pubDate'], '%a, %d %b %Y %H:%M:%S +0900').replace(tzinfo=kst)
                         title = BeautifulSoup(i['title'], 'html.parser').get_text()
                         desc = i.get('description', '')
-                        # 대소문자 구분 없이 필터링하기 위해 소문자로 변환
                         full_text_lower = (title + desc).replace(' ', '').lower()
                         
                         if (now - p_date).total_seconds() < self.time_limit:
@@ -73,10 +72,12 @@ class ShuMonitorEngine:
                 for i in items:
                     try:
                         p_date = datetime.datetime.strptime(i.pubDate.text[:25].strip(), '%a, %d %b %Y %H:%M:%S')
-                        if (datetime.datetime.utcnow() - p_date).total_seconds() < self.time_limit:
+                        p_date = pytz.utc.localize(p_date).astimezone(kst)
+                        if (now - p_date).total_seconds() < self.time_limit:
                             pool.append({'src': self.src_mapping[target], 'kw': i.title.text, 'desc': '', 'url': i.link.text})
                     except: pass
 
+            # 다음, 네이트, 펨코, 디시 로직 (슈 님 코드 그대로 유지)
             d_res = requests.get("https://news.daum.net/ranking/popular", headers=self.headers)
             pool.extend([{'src': self.src_mapping['DAUM'], 'kw': a.text.strip(), 'desc': '', 'url': a.get('href')} for a in BeautifulSoup(d_res.text, 'html.parser').select('.link_txt')[:30]])
             
@@ -97,72 +98,71 @@ class ShuMonitorEngine:
         seen, unique_pool = set(), []
         for item in pool:
             skel = re.sub(r'\s+', '', item['kw'])
-            full_text_lower = (item['kw'] + item.get('desc', '')).replace(' ', '').lower()
-            if skel not in seen and not any(ex.lower() in full_text_lower for ex in self.total_exclude):
+            if skel not in seen:
                 seen.add(skel); unique_pool.append(item)
         
         return sorted(unique_pool, key=lambda x: 0 if '이슈' in x['src'] or '🔥' in x['src'] else 1)
 
-# --- UI 레이아웃 ---
-st.set_page_config(layout="wide", page_title="실시간 이슈 모니터링")
-st.markdown("""<style>
-    .block-container { padding-top: 1.5rem !important; }
-    .stTextInput > div > div > input { height: 2.5rem !important; border-radius: 6px !important; }
-    .stButton > button { height: 2.5rem !important; font-weight: 700 !important; border-radius: 6px !important; }
-    .status-badge { background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px; padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold; height: 2.5rem; line-height: 1.5rem; }
-    h3 { margin-top: -10px !important; margin-bottom: 5px !important; color: #1e3a8a; font-size: 1.5rem !important; }
-    hr { margin: 1.2rem 0 !important; border-top: 1px solid #eee !important; }
-    #MainMenu, header {visibility: hidden;}
-</style>""", unsafe_allow_html=True)
+# --- 여기서부터 UI를 run_monitor() 함수로 감싸기 ---
+def run_monitor():
+    st.markdown("""<style>
+        .block-container { padding-top: 1.5rem !important; }
+        .stTextInput > div > div > input { height: 2.5rem !important; border-radius: 6px !important; }
+        .stButton > button { height: 2.5rem !important; font-weight: 700 !important; border-radius: 6px !important; }
+        .status-badge { background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px; padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold; height: 2.5rem; line-height: 1.5rem; }
+        h3 { margin-top: -10px !important; margin-bottom: 5px !important; color: #1e3a8a; font-size: 1.5rem !important; }
+        hr { margin: 1.2rem 0 !important; border-top: 1px solid #eee !important; }
+    </style>""", unsafe_allow_html=True)
 
-if 'data_pool' not in st.session_state: st.session_state.data_pool = []
-if 'editor_key' not in st.session_state: st.session_state.editor_key = 0
+    if 'data_pool' not in st.session_state: st.session_state.data_pool = []
+    if 'editor_key' not in st.session_state: st.session_state.editor_key = 0
 
-c1, c2, c3, c4 = st.columns([2.5, 1, 1, 0.8])
-with c1: st.markdown("### 🔍 실시간 이슈 모니터링")
-with c2:
-    if st.button("🚀 전체 채널 스캔", use_container_width=True):
-        st.session_state.data_pool = [dict(d, 선택=True) for d in ShuMonitorEngine().fetch_all_routes()]
-        st.session_state.editor_key += 1; st.rerun()
-with c3: filter_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
-with c4:
-    count = len(st.session_state.data_pool)
-    st.markdown(f"<div class='status-badge'>{count} 건</div>", unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns([2.5, 1, 1, 0.8])
+    with c1: st.markdown("### 🔍 실시간 이슈 모니터링")
+    with c2:
+        if st.button("🚀 전체 채널 스캔", use_container_width=True):
+            st.session_state.data_pool = [dict(d, 선택=True) for d in ShuMonitorEngine().fetch_all_routes()]
+            st.session_state.editor_key += 1; st.rerun()
+    with c3: filter_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
+    with c4:
+        count = len(st.session_state.data_pool)
+        st.markdown(f"<div class='status-badge'>{count} 건</div>", unsafe_allow_html=True)
 
-_, b1, b2 = st.columns([8.2, 0.9, 0.9])
-with b1:
-    if st.button("전체선택", use_container_width=True):
-        for item in st.session_state.data_pool: item['선택'] = True
-        st.session_state.editor_key += 1; st.rerun()
-with b2:
-    if st.button("선택해제", use_container_width=True):
-        for item in st.session_state.data_pool: item['선택'] = False
-        st.session_state.editor_key += 1; st.rerun()
+    _, b1, b2 = st.columns([8.2, 0.9, 0.9])
+    with b1:
+        if st.button("전체선택", use_container_width=True):
+            for item in st.session_state.data_pool: item['선택'] = True
+            st.session_state.editor_key += 1; st.rerun()
+    with b2:
+        if st.button("선택해제", use_container_width=True):
+            for item in st.session_state.data_pool: item['선택'] = False
+            st.session_state.editor_key += 1; st.rerun()
 
-st.markdown("---")
+    st.markdown("---")
 
-if st.session_state.data_pool:
-    df = pd.DataFrame(st.session_state.data_pool)
-    if filter_query: df = df[df['kw'].str.contains(filter_query, case=False)]
-    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
-    df['수집시점'] = now.strftime('%-m/%-d %H:%M')
+    if st.session_state.data_pool:
+        df = pd.DataFrame(st.session_state.data_pool)
+        if filter_query: df = df[df['kw'].str.contains(filter_query, case=False)]
+        now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+        df['수집시점'] = now.strftime('%m/%d %H:%M')
 
-    edited_df = st.data_editor(
-        df,
-        column_config={
-            "수집시점": st.column_config.TextColumn("수집시점", width=85),
-            "src": st.column_config.TextColumn("출처", width=65),
-            "kw": st.column_config.TextColumn("이슈 헤드라인 전문", width="large"),
-            "url": st.column_config.LinkColumn("원문", display_text="🔗", width=65),
-            "선택": st.column_config.CheckboxColumn("선택", width=65)
-        },
-        column_order=("수집시점", "src", "kw", "url", "선택"),
-        hide_index=True, use_container_width=True, 
-        height=600,
-        key=f"editor_{st.session_state.editor_key}"
-    )
+        edited_df = st.data_editor(
+            df,
+            column_config={
+                "수집시점": st.column_config.TextColumn("수집시점", width=85),
+                "src": st.column_config.TextColumn("출처", width=65),
+                "kw": st.column_config.TextColumn("이슈 헤드라인 전문", width="large"),
+                "url": st.column_config.LinkColumn("원문", display_text="🔗", width=65),
+                "선택": st.column_config.CheckboxColumn("선택", width=65)
+            },
+            column_order=("수집시점", "src", "kw", "url", "선택"),
+            hide_index=True, use_container_width=True, 
+            height=600,
+            key=f"editor_{st.session_state.editor_key}"
+        )
 
-    if not edited_df[edited_df['선택'] == True].empty:
-        output = io.BytesIO()
-        edited_df[edited_df['선택'] == True].drop(columns=['선택']).to_excel(output, index=False)
-        st.download_button(label="📊 선택 항목 엑셀 추출", data=output.getvalue(), file_name="Shu_Issue_Report.xlsx", use_container_width=True)
+        if not edited_df[edited_df['선택'] == True].empty:
+            output = io.BytesIO()
+            # openpyxl 엔진 사용을 위해 requirements.txt 확인 필수
+            edited_df[edited_df['선택'] == True].drop(columns=['선택']).to_excel(output, index=False, engine='openpyxl')
+            st.download_button(label="📊 선택 항목 엑셀 추출", data=output.getvalue(), file_name="Shu_Issue_Report.xlsx", use_container_width=True)
