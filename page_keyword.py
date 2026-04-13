@@ -8,8 +8,8 @@ from collections import deque
 
 def run_keyword():
     with st.sidebar:
-        st.title("🔐 관리자 인증")
-        password = st.text_input("접속 비밀번호", type="password")
+        st.markdown("### 🔐 관리자 인증")
+        password = st.text_input("접속 비밀번호", type="password", label_visibility="collapsed", placeholder="비밀번호 입력")
         st.divider()
         if st.button("⛔ 분석 중단", use_container_width=True):
             st.session_state.stop_flag = True
@@ -29,17 +29,17 @@ def run_keyword():
     def handle_api_error(e, seed):
         err = str(e)
         if "429" in err or "RESOURCE_EXHAUSTED" in err:
-            st.error(f"'{seed}' 실패 — 사용량 한도 초과. 잠시 후 재시도하세요.")
+            return f"'{seed}' 실패 — 사용량 한도 초과"
         elif "403" in err or "PERMISSION_DENIED" in err:
-            st.error(f"'{seed}' 실패 — API 키 차단 또는 권한 없음. 키를 확인하세요.")
+            return f"'{seed}' 실패 — API 키 차단 또는 권한 없음"
         elif "400" in err or "INVALID_ARGUMENT" in err:
-            st.error(f"'{seed}' 실패 — 잘못된 요청입니다.")
+            return f"'{seed}' 실패 — 잘못된 요청"
         elif "503" in err or "UNAVAILABLE" in err:
-            st.error(f"'{seed}' 실패 — Gemini 서버 일시 불가. 잠시 후 재시도하세요.")
+            return f"'{seed}' 실패 — Gemini 서버 일시 불가"
         elif "ConnectionError" in err or "connect" in err.lower():
-            st.error(f"'{seed}' 실패 — 네트워크 차단 또는 IP 접근 불가.")
+            return f"'{seed}' 실패 — 네트워크 차단 또는 IP 접근 불가"
         else:
-            st.error(f"'{seed}' 실패 — 알 수 없는 오류: {e}")
+            return f"'{seed}' 실패 — {e}"
 
     def search_naver_news(query, client_id, client_secret):
         try:
@@ -48,11 +48,7 @@ def run_keyword():
                 "X-Naver-Client-Id": client_id,
                 "X-Naver-Client-Secret": client_secret
             }
-            params = {
-                "query": query,
-                "display": 5,
-                "sort": "date"
-            }
+            params = {"query": query, "display": 5, "sort": "date"}
             response = requests.get(url, headers=headers, params=params)
             if response.status_code != 200:
                 return ""
@@ -82,25 +78,45 @@ def run_keyword():
                     time.sleep(1)
         request_times.append(time.time())
 
+    st.markdown("## 🎯 리스크 키워드 확장")
+    st.caption("네이버 뉴스 + Gemini Google Search 기반 위험 키워드 발굴")
+    st.divider()
+
     col_input, col_output = st.columns([1, 2], gap="large")
 
     with col_input:
-        st.markdown("### 🎯 리스크 확장 설정")
-        st.info("네이버 뉴스 + Gemini Google Search 기반 위험 키워드 발굴")
+        st.markdown("#### 📡 대상 키워드 입력")
 
         gemini_api_key = st.secrets.get("GEMINI_API_KEY")
         naver_client_id = st.secrets.get("NAVER_ID")
         naver_client_secret = st.secrets.get("NAVER_SECRET")
 
         target_text = st.text_area(
-            "📡 대상 키워드 입력", height=250,
-            placeholder="정원오\n김병기\n대전늑대",
-            help="한 줄에 하나씩 입력하세요."
+            "키워드",
+            height=420,
+            placeholder="정원오\n오월드늑대\n슈퍼주니어사고\n\n한 줄에 하나씩 입력하세요.",
+            label_visibility="collapsed"
         )
-        analyze_clicked = st.button("🚀 리스크 분석 및 나열", use_container_width=True)
+
+        seeds_preview = [t.strip() for t in target_text.split('\n') if t.strip()]
+        seed_count = len(seeds_preview)
+        if seed_count > 0:
+            est_sec = seed_count * 7
+            est_min = est_sec // 60
+            est_sec_rem = est_sec % 60
+            if est_min > 0:
+                est_str = f"예상 소요 약 {est_min}분 {est_sec_rem}초"
+            else:
+                est_str = f"예상 소요 약 {est_sec_rem}초"
+            st.caption(f"✅ {seed_count}개 입력됨 · {est_str}")
+        else:
+            st.caption("키워드를 입력해주세요.")
+
+        st.write("")
+        analyze_clicked = st.button("🚀 리스크 분석 및 나열", use_container_width=True, type="primary")
 
     with col_output:
-        st.markdown("### 📋 분석 결과 리스트")
+        st.markdown("#### 📋 분석 결과 리스트")
 
         if analyze_clicked:
             st.session_state.stop_flag = False
@@ -123,6 +139,7 @@ def run_keyword():
             seeds = [t.strip() for t in target_text.split('\n') if t.strip()]
             final_results = []
             seen = set()
+            error_logs = []
 
             progress = st.progress(0)
             status = st.empty()
@@ -132,30 +149,24 @@ def run_keyword():
                     status.warning(f"⛔ 분석 중단 — {i}개 시드까지 완료, {len(final_results)}개 키워드 수집됨")
                     break
 
-                progress.progress((i + 1) / len(seeds), text=f"{seed} 분석 중... ({i+1}/{len(seeds)})")
+                progress.progress((i + 1) / len(seeds), text=f"🔍 {seed} 분석 중... ({i+1}/{len(seeds)})")
 
                 try:
                     wait_for_rate_limit(status)
 
-                    # 1단계 네이버 뉴스 검색 (없어도 계속 진행)
                     news_context = ""
-
                     if naver_client_id and naver_client_secret:
-                        # 1차 시드만으로 검색
                         news_context += search_naver_news(
                             query=seed,
                             client_id=naver_client_id,
                             client_secret=naver_client_secret
                         )
-                        # 2차 논란 의혹 수사 붙여서 검색
                         news_context += search_naver_news(
                             query=f"{seed} 논란 의혹 수사",
                             client_id=naver_client_id,
                             client_secret=naver_client_secret
                         )
 
-                    # 2단계 Gemini로 키워드 발굴
-                    # 네이버 뉴스 있으면 맥락에 포함, 없으면 Gemini Google Search만으로 발굴
                     if news_context.strip():
                         naver_section = f"""
 아래는 네이버에서 수집한 최신 뉴스입니다. 이 내용을 참고하되, Google Search로 추가 맥락도 파악하세요.
@@ -210,17 +221,36 @@ def run_keyword():
                                 final_results.append(cleaned)
 
                 except Exception as e:
-                    handle_api_error(e, seed)
+                    error_logs.append(handle_api_error(e, seed))
 
             progress.empty()
 
             if final_results:
+                now_str = time.strftime("%H:%M")
                 if not st.session_state.stop_flag:
-                    status.success(f"✅ 완료! 총 {len(final_results)}개 키워드")
-                st.text_area("전체 복사 영역", value="\n".join(final_results), height=600)
+                    status.success(f"✅ 완료! 총 {len(final_results)}개 키워드 · {now_str}")
+                st.text_area(
+                    "전체 복사 영역",
+                    value="\n".join(final_results),
+                    height=480,
+                    label_visibility="collapsed"
+                )
             else:
                 if not st.session_state.stop_flag:
-                    status.error("결과가 없습니다. 오류 메시지를 확인하세요.")
+                    status.empty()
+                    st.error("결과가 없습니다. 오류 메시지를 확인하세요.")
+
+            if error_logs:
+                with st.expander(f"⚠️ 오류 {len(error_logs)}건 확인하기"):
+                    for err in error_logs:
+                        st.caption(err)
 
         else:
-            st.write("왼쪽에서 키워드를 입력하고 버튼을 눌러주세요.")
+            st.text_area(
+                "결과 대기",
+                value="",
+                height=480,
+                placeholder="왼쪽에서 키워드를 입력하고\n분석 버튼을 눌러주세요.",
+                label_visibility="collapsed",
+                disabled=True
+            )
