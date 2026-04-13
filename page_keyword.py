@@ -10,17 +10,18 @@ def run_keyword():
         # 팁: 나중에 st.secrets에 저장해서 쓰시면 더 안전합니다.
         password = st.text_input("접속 비밀번호", type="password")
 
-    # 비밀번호가 틀리면 화면 전체를 잠금
-        admin_pw = st.secrets.get("ADMIN_PASSWORD", "1234") # 세팅 안됐을 때를 대비한 기본값 1234
-        if password == admin_pw:
-        # 인증 성공 로직
+    # 1. 관리자 비밀번호 가져오기
+    admin_pw = st.secrets.get("ADMIN_PASSWORD", "1234") 
+
+    # 2. 비밀번호 검증 로직 (들여쓰기 수정 완료)
+    if password != admin_pw:
         if password == "":
             st.info("왼쪽 사이드바에 비밀번호를 입력해주세요.")
         else:
             st.error("비밀번호가 올바르지 않습니다.")
-        return
+        return  # 비밀번호가 틀리면 아래 메인 화면 코드를 실행하지 않고 중단
 
-    # --- [수정] 메인 화면 레이아웃 분할 (왼쪽 1 : 오른쪽 2 비율) ---
+    # --- 여기서부터는 비밀번호가 맞을 때만 실행되는 메인 화면 ---
     col_input, col_output = st.columns([1, 2], gap="large")
 
     with col_input:
@@ -90,10 +91,8 @@ def run_keyword():
                         for r in backup_risks: final_results.append(f"{seed}{r}")
                     st.success("✅ 로컬 조합 완료!")
 
-                # 결과 출력 칸 (오른쪽 전용)
+                # 결과 출력 칸
                 result_str = "\n".join(final_results)
                 st.text_area("전체 복사 영역", value=result_str, height=600)
         else:
             st.write("왼쪽에서 키워드를 입력하고 버튼을 눌러주세요.")
-
-# 메인 실행부에서 사이드바 화살표 살려두는 설정 확인 필요
