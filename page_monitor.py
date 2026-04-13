@@ -254,11 +254,6 @@ class ShuMonitorEngine:
                 seen.add(skel)
                 unique_pool.append(item)
 
-        # 디버그: 채널별 수집 건수 — 스캔 결과 화면에 표시
-        st.session_state['debug_pool'] = pd.Series([i['src'] for i in pool]).value_counts().to_dict()
-        st.session_state['debug_total'] = len(pool)
-        st.session_state['debug_unique'] = len(unique_pool)
-
         # 정렬: 고정주제(🔥) 1순위 > 네이버 실시간(⏱️) 2순위 > 나머지
         def sort_key(x):
             if '🔥' in x['src']:
@@ -282,12 +277,7 @@ def run_monitor():
                 display: none !important;
                 height: 0 !important;
             }
-            /* 사이드바 접기 버튼 숨기기 */
-            [data-testid="collapsedControl"],
-            button[kind="header"][aria-label="Close sidebar"],
-            .st-emotion-cache-1egp75f { 
-                display: none !important; 
-            }
+
             .main .block-container {
                 padding-top: 2.5rem !important;
                 margin-top: 0 !important;
@@ -340,13 +330,6 @@ def run_monitor():
         if st.button("선택해제", use_container_width=True):
             for item in st.session_state.data_pool: item['선택'] = False
             st.session_state.editor_key += 1; st.rerun()
-
-    # 디버그 결과 표시
-    if 'debug_pool' in st.session_state:
-        with st.expander("🔎 채널별 수집 현황 (디버그)", expanded=True):
-            debug_df = pd.DataFrame(list(st.session_state['debug_pool'].items()), columns=['채널', '수집건수'])
-            st.dataframe(debug_df, hide_index=True)
-            st.markdown(f"**전체 수집: {st.session_state['debug_total']}건 / 중복제거 후: {st.session_state['debug_unique']}건**")
 
     st.markdown("---")
 
