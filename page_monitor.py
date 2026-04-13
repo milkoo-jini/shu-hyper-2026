@@ -305,7 +305,7 @@ class ShuMonitorEngine:
             # 고유명사/수치 3개 이상 겹치면 중복
             if not key_a or not key_b:
                 return False
-            return len(key_a & key_b) >= 3
+            return len(key_a & key_b) >= 2
 
         seen_exact = set()
         seen_tokens = []
