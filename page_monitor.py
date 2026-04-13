@@ -165,10 +165,10 @@ def run_monitor():
             df,
             column_config={
                 "수집시점": st.column_config.TextColumn("시간", width=80),
-                "src": st.column_config.TextColumn("출처", width=120),
+                "src": st.column_config.TextColumn("출처", width=200),
                 "kw": st.column_config.TextColumn("이슈 헤드라인 전문", width=800),
-                "url": st.column_config.LinkColumn(" ", display_text="🔗", width=40),
-                "선택": st.column_config.CheckboxColumn(" ", width=40)
+                "url": st.column_config.LinkColumn(" ", display_text="🔗", width=80),
+                "선택": st.column_config.CheckboxColumn(" ", width=80)
             },
             column_order=("수집시점", "src", "kw", "url", "선택"),
             hide_index=True, 
