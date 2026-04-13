@@ -164,7 +164,7 @@ def run_monitor():
         edited_df = st.data_editor(
             df,
             column_config={
-                "수집시점": st.column_config.TextColumn("시간", width=80),
+                "수집시점": st.column_config.TextColumn("시간", width=150),
                 "src": st.column_config.TextColumn("출처", width=200),
                 "kw": st.column_config.TextColumn("이슈 헤드라인 전문", width=800),
                 "url": st.column_config.LinkColumn(" ", display_text="🔗", width=80),
