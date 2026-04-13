@@ -16,7 +16,7 @@ class ShuMonitorEngine:
         self.fixed_topics = ["북중미 월드컵", "지방선거"]
         self.time_limit = 86400 * 3 
         
-        # [강력 차단 필터 유지]
+        # [차단 필터]
         self.exclude_ad_keywords = [
             "who is", "who", "인물열전", "ceo스토리", "기업인사", "조언", "상담", 
             "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", "법률사무소",
@@ -27,12 +27,18 @@ class ShuMonitorEngine:
         self.base_exclude = ['방송', '출연', '방영', '예능', '드라마', '본방', '시청률', 'mc', '컴백', '데뷔', '무대', '가수', '아이돌', '솔로', '앨범', '차트', '관객수', '박스오피스', '영화관', '개봉', '제작보고회', '회상했다', '회고', '당시', '과거', '추억', '인터뷰', '성공 비결']
         self.total_exclude = [word.lower() for word in (self.base_exclude + self.exclude_ad_keywords)]
         
+        # [이름표 정리] VIEW 관련 명칭을 완전히 제거했습니다.
         self.src_mapping = {
-            'NAVER_DATE': '⏱️ 실시간 뉴스(네이버)', 'NAVER_SIM': '📢 주요 이슈(네이버)',
-            'G_NEWS': '📰 구글 뉴스', 'G_TRENDS': '🌐 구글 트렌드', 
-            'DAUM': '🟠 다음 인기뉴스', 'NATE': '🔴 네이트 이슈', 
-            'FMKOREA': '⚽ 에펨코리아(포텐)', 'DCINSIDE': '🖼️ 디시인사이드(실베)',
-            'THEQOO': '🍵 더쿠(HOT)', 'INSTIZ': '🎀 인스티즈(이슈)'
+            'NAVER_DATE': '⏱️ 네이버 실시간 뉴스', 
+            'NAVER_SIM': '📢 네이버 주요 뉴스',
+            'G_NEWS': '📰 구글 뉴스 검색', 
+            'G_TRENDS': '🌐 구글 트렌드(실시간)', 
+            'DAUM': '🟠 다음 인기 뉴스', 
+            'NATE': '🔴 네이트 이슈업', 
+            'FMKOREA': '⚽ 에펨코리아', 
+            'DCINSIDE': '🖼️ 디시인사이드',
+            'THEQOO': '🍵 더쿠(HOT)', 
+            'INSTIZ': '🎀 인스티즈'
         }
 
     def fetch_all_routes(self):
@@ -41,7 +47,6 @@ class ShuMonitorEngine:
         kst = pytz.timezone('Asia/Seoul')
         now = datetime.datetime.now(kst)
         
-        # 통합 검색 키워드
         raw_keywords = "논란|사건|사고|폭로|의혹|경고|피해|주의|제보"
         q_encoded = urllib.parse.quote(raw_keywords)
 
@@ -61,13 +66,13 @@ class ShuMonitorEngine:
             return res
 
         try:
-            # 1. 네이버 뉴스
+            # 1. 네이버 뉴스 (블로그/카페 API 호출 코드는 아예 삭제됨)
             n_sim = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={q_encoded}&display=30&sort=sim", headers=h).json()
             n_date = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={q_encoded}&display=50&sort=date", headers=h).json()
             pool.extend(process_naver(n_sim.get('items', []), self.src_mapping['NAVER_SIM']))
             pool.extend(process_naver(n_date.get('items', []), self.src_mapping['NAVER_DATE']))
 
-            # 2. 구글 뉴스 (검색 기반 추가)
+            # 2. 구글 뉴스
             g_rss_url = f"https://news.google.com/rss/search?q={q_encoded}&hl=ko&gl=KR&ceid=KR:ko"
             g_news_res = requests.get(g_rss_url, headers=self.headers)
             g_items = BeautifulSoup(g_news_res.text, 'xml').find_all('item')
@@ -76,7 +81,7 @@ class ShuMonitorEngine:
                 if not any(ex.replace(' ', '').lower() in title.lower().replace(' ', '') for ex in self.total_exclude):
                     pool.append({'src': self.src_mapping['G_NEWS'], 'kw': title, 'desc': '', 'url': i.link.text})
 
-            # 3. 구글 트렌드 (RSS)
+            # 3. 구글 트렌드
             rss = requests.get("https://trends.google.com/trending/rss?geo=KR", headers=self.headers)
             items = BeautifulSoup(rss.text, 'xml').find_all('item')
             for i in items:
@@ -86,7 +91,7 @@ class ShuMonitorEngine:
                 if not any(ex.replace(' ', '').lower() in title.lower().replace(' ', '') for ex in self.total_exclude):
                     pool.append({'src': self.src_mapping['G_TRENDS'], 'kw': title, 'desc': '', 'url': link})
 
-            # 4. 커뮤니티 및 다음/네이트 수집 로직
+            # 4. 공통 수집 (다음/네이트/커뮤니티)
             def generic_fetch(url, selector, label, base_url=""):
                 try:
                     res = requests.get(url, headers=self.headers, timeout=10)
@@ -102,11 +107,8 @@ class ShuMonitorEngine:
                     return out
                 except: return []
 
-            # 다음 뉴스 (랭킹/인기)
             pool.extend(generic_fetch("https://news.daum.net/ranking/popular", ".link_txt", self.src_mapping['DAUM'])[:40])
-            # 네이트 뉴스
             pool.extend(generic_fetch("https://news.nate.com/edit/issueup/", ".txt_tit", self.src_mapping['NATE'])[:20])
-            # 커뮤니티 4종
             pool.extend(generic_fetch("https://www.fmkorea.com/best", ".title.hotdeal_var8 a", self.src_mapping['FMKOREA'], "https://www.fmkorea.com")[:25])
             pool.extend(generic_fetch("https://www.dcinside.com/", ".box_best .list_best li a", self.src_mapping['DCINSIDE'])[:15])
             pool.extend(generic_fetch("https://theqoo.net/hot", ".title a", self.src_mapping['THEQOO'], "https://theqoo.net")[:20])
@@ -125,11 +127,7 @@ def run_monitor():
     st.markdown("""
         <style>
             [data-testid="stHeader"], [data-testid="stDecoration"] { display: none !important; }
-            .main .block-container {
-                margin-top: 150px !important;
-                padding-top: 0px !important;
-                max-width: 95% !important;
-            }
+            .main .block-container { margin-top: 150px !important; max-width: 95% !important; }
             .status-badge { 
                 background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px; 
                 padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold; 
@@ -145,22 +143,20 @@ def run_monitor():
     
     c1, c2, c3 = st.columns([1, 1, 0.8])
     with c1:
-        if st.button("🚀 전체 채널 스캔 (구글/다음 포함)", use_container_width=True):
+        if st.button("🚀 전체 채널 스캔 (뉴스 중심)", use_container_width=True):
             st.session_state.data_pool = [dict(d, 선택=True) for d in ShuMonitorEngine().fetch_all_routes()]
             st.session_state.editor_key += 1; st.rerun()
     with c2: filter_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
-    with c3:
-        st.markdown(f"<div class='status-badge'>{len(st.session_state.data_pool)}건</div>", unsafe_allow_html=True)
+    with c3: st.markdown(f"<div class='status-badge'>{len(st.session_state.data_pool)}건</div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
     if st.session_state.data_pool:
         df = pd.DataFrame(st.session_state.data_pool)
         if filter_query: df = df[df['kw'].str.contains(filter_query, case=False)]
-        now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
-        df['수집시점'] = now.strftime('%m/%d %H:%M')
+        df['수집시점'] = datetime.datetime.now(pytz.timezone('Asia/Seoul')).strftime('%m/%d %H:%M')
 
-        edited_df = st.data_editor(
+        st.data_editor(
             df,
             column_config={
                 "수집시점": st.column_config.TextColumn("시간", width=150),
@@ -170,16 +166,9 @@ def run_monitor():
                 "선택": st.column_config.CheckboxColumn(" ", width=80)
             },
             column_order=("수집시점", "src", "kw", "url", "선택"),
-            hide_index=True, 
-            use_container_width=False,
-            height=600,
+            hide_index=True, use_container_width=False, height=600,
             key=f"editor_{st.session_state.editor_key}"
         )
-
-        if not edited_df[edited_df['선택'] == True].empty:
-            output = io.BytesIO()
-            edited_df[edited_df['선택'] == True].drop(columns=['선택']).to_excel(output, index=False, engine='openpyxl')
-            st.download_button(label="📊 선택 항목 엑셀 추출", data=output.getvalue(), file_name="Shu_Comprehensive_Report.xlsx", use_container_width=True)
 
 if __name__ == "__main__":
     run_monitor()
