@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime, re, requests, io
+import urllib.parse
 from bs4 import BeautifulSoup
 import pytz
 
@@ -41,6 +42,12 @@ class ShuMonitorEngine:
         kst = pytz.timezone('Asia/Seoul')
         now = datetime.datetime.now(kst)
         
+        # [표준화] 네이버 API용 OR 검색 쿼리 구성
+        raw_keywords = "논란|사건|사고|폭로|의혹|경고|피해|주의|제보"
+        encoded_news_query = urllib.parse.quote(raw_keywords)
+        # VIEW는 광고 제외 파라미터 포함하여 인코딩
+        encoded_view_query = urllib.parse.quote(f"{raw_keywords} -홍보 -마케팅 -상담 -광고")
+
         def process_naver(items, label, is_view=False):
             res = []
             for i in items:
@@ -62,20 +69,19 @@ class ShuMonitorEngine:
             return res
 
         try:
-            # 1. 네이버 뉴스 (통합 키워드 확장 적용)
-            search_query = "논란 사건 사고 폭로 의혹 경고 피해 주의 제보"
-            n_sim = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={search_query}&display=20&sort=sim", headers=h).json()
-            n_date = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={search_query}&display=50&sort=date", headers=h).json()
+            # 1. 네이버 뉴스 (OR 연산 적용)
+            n_sim = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={encoded_news_query}&display=30&sort=sim", headers=h).json()
+            n_date = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={encoded_news_query}&display=50&sort=date", headers=h).json()
             pool.extend(process_naver(n_sim.get('items', []), self.src_mapping['NAVER_SIM']))
             pool.extend(process_naver(n_date.get('items', []), self.src_mapping['NAVER_DATE']))
 
-            # 2. 네이버 VIEW (통합 키워드 확장 + 광고 제외 파라미터 유지)
-            v_res = requests.get(f"https://openapi.naver.com/v1/search/blog.json?query={search_query} -홍보 -마케팅 -상담 -광고&display=50&sort=date", headers=h).json()
+            # 2. 네이버 VIEW (OR 연산 + 광고 파라미터 적용)
+            v_res = requests.get(f"https://openapi.naver.com/v1/search/blog.json?query={encoded_view_query}&display=50&sort=date", headers=h).json()
             pool.extend(process_naver(v_res.get('items', []), self.src_mapping['NAVER_VIEW'], is_view=True))
             
             # 3. 고정 주제
             for t in self.fixed_topics:
-                t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=25&sort=date", headers=h).json()
+                t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={urllib.parse.quote(t)}&display=25&sort=date", headers=h).json()
                 pool.extend(process_naver(t_n.get('items', []), f"🔥 {t} 이슈"))
             
             # 4. 구글 트렌드 (링크 수정 로직 유지)
@@ -107,7 +113,7 @@ class ShuMonitorEngine:
             pool.extend(generic_fetch("https://www.fmkorea.com/best", ".title.hotdeal_var8 a", self.src_mapping['FMKOREA'], "https://www.fmkorea.com")[:25])
             pool.extend(generic_fetch("https://www.dcinside.com/", ".box_best .list_best li a", self.src_mapping['DCINSIDE'])[:15])
             pool.extend(generic_fetch("https://theqoo.net/hot", ".title a", self.src_mapping['THEQOO'], "https://theqoo.net")[:20])
-            pool.extend(generic_fetch("https://www.instiz.net/bbs/list.php?id=pt", ".st_title a", self.src_mapping['INSTIZ'], "https://www.instiz.net")[:20])
+            pool.extend(generic_fetch("https://www.instiz.net/bbs/list.php?id=pt", ".st_title a", self.st_mapping['INSTIZ'] if hasattr(self, 'st_mapping') else self.src_mapping['INSTIZ'], "https://www.instiz.net")[:20])
             pool.extend(generic_fetch("https://news.daum.net/ranking/popular", ".link_txt", self.src_mapping['DAUM'])[:30])
             pool.extend(generic_fetch("https://news.nate.com/edit/issueup/", ".txt_tit", self.src_mapping['NATE'])[:15])
 
