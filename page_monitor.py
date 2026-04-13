@@ -24,13 +24,12 @@ class ShuMonitorEngine:
 
         # 네이버 API 검색 쿼리 — 부정적 이슈 중심으로 쿼리별 분리
         self.naver_queries = [
-            "사건 사고",
-            "피해 사기",
-            "논란 의혹",
-            "폭로 고발",
-            "경고 주의",
-            "리콜 결함",
-            "집단 소송",
+            "사건사고",
+            "피해자",
+            "사기",
+            "논란",
+            "고발",
+            "의혹",
         ]
 
         # 제외 단어 — 광고·홍보·단순정보성 노이즈
@@ -42,6 +41,12 @@ class ShuMonitorEngine:
             "대처법", "준비법", "대응방법", "성공사례", "무료진단", "해결사",
             "조언", "상담", "전문가", "ceo스토리", "기업인사", "인물열전",
             "who is", "e종목", "클릭", "주년", "탄생",
+            # 광고·분양·상품
+            "분양", "입주", "청약", "임박", "특가", "할인", "세일", "프로모션", "한정", "신제품", "출시", "런칭",
+            # 단순 정보성·기획
+            "랭킹", "순위", "추천", "비교", "총정리", "정리해봤", "알아보자", "방법은", "이유는",
+            # 연예 추가
+            "팬미팅", "콘서트", "티켓", "굿즈", "직캠", "fancam", "교제", "열애", "결별", "이별",
         ]
         self.exclude_entertainment = [
             "방송", "출연", "방영", "예능", "드라마", "본방", "시청률", "mc",
@@ -167,20 +172,15 @@ class ShuMonitorEngine:
         except:
             pass
 
-        # 3. 네이버 뉴스 — 쿼리별로 분리 수집
+        # 3. 네이버 뉴스 — 쿼리별 분리, sim만 수집 (중복 최소화)
         for q in self.naver_queries:
             eq = urllib.parse.quote(q)
             try:
-                sim  = requests.get(
+                sim = requests.get(
                     f"https://openapi.naver.com/v1/search/news.json?query={eq}&display=20&sort=sim",
                     headers=h, timeout=5
                 ).json()
-                date = requests.get(
-                    f"https://openapi.naver.com/v1/search/news.json?query={eq}&display=30&sort=date",
-                    headers=h, timeout=5
-                ).json()
-                pool.extend(self._process_naver(sim.get('items',  []), self.src_mapping['NAVER_SIM']))
-                pool.extend(self._process_naver(date.get('items', []), self.src_mapping['NAVER_DATE']))
+                pool.extend(self._process_naver(sim.get('items', []), self.src_mapping['NAVER_SIM']))
             except:
                 pass
 
