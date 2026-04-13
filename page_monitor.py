@@ -22,7 +22,7 @@ class ShuMonitorEngine:
             'Referer': 'https://www.google.com/',
         }
         self.kst = pytz.timezone('Asia/Seoul')
-        self.time_limit = 86400 * 3
+        self.time_limit = 86400 * 1
 
         # 고정 주제 (항상 포함)
         self.fixed_topics = ["북중미 월드컵", "지방선거"]
