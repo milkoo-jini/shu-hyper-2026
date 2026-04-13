@@ -15,18 +15,22 @@ class ShuMonitorEngine:
         self.fixed_topics = ["북중미 월드컵", "지방선거"]
         self.time_limit = 86400 * 3 
         
+        # VIEW 전용 특화 키워드
+        self.view_keywords = ["사기", "먹튀", "폐업", "연락두절", "사기사이트", "불법유통", "위조", "도용", "쇼핑몰피해", "서비스종료"]
+        
+        # 제외 단어 리스트
         self.exclude_ad_keywords = [
             "who is", "who", "인물열전", "ceo스토리", "기업인사", "조언", "상담", 
             "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", 
-            "법률사무소", "홍보", "마케팅", "기고",
-            "e종목", "클릭", "주년", "탄생", "쇼룸"
+            "법률사무소", "홍보", "마케팅", "기고", "대처법", "준비법", "대응방법",
+            "e종목", "클릭", "주년", "탄생", "쇼룸", "무료증정", "이벤트", "모집"
         ]
         self.base_exclude = ['방송', '출연', '방영', '예능', '드라마', '본방', '시청률', 'mc', '컴백', '데뷔', '무대', '가수', '아이돌', '솔로', '앨범', '차트', '관객수', '박스오피스', '영화관', '개봉', '제작보고회', '회상했다', '회고', '당시', '과거', '추억', '인터뷰', '성공 비결']
         self.total_exclude = [word.lower() for word in (self.base_exclude + self.exclude_ad_keywords)]
         
         self.src_mapping = {
             'NAVER_DATE': '⏱️ 실시간 뉴스', 'NAVER_SIM': '📢 주요 이슈(네이버)',
-            'NAVER_VIEW': '🔍 네이버 VIEW(블로그/카페)', 'SIGNAL': '📈 급상승 시그널', 
+            'NAVER_VIEW': '🔍 네이버 VIEW(피해/신고)', 'SIGNAL': '📈 급상승 시그널', 
             'G_TRENDS': '🌐 구글 트렌드', 'G_NEWS': '📰 구글 뉴스', 
             'DAUM': '🟠 다음 인기', 'NATE': '🔴 네이트 이슈', 
             'FMKOREA': '⚽ 에펨코리아(포텐)', 'DCINSIDE': '🖼️ 디시인사이드(실베)',
@@ -50,8 +54,9 @@ class ShuMonitorEngine:
                         p_date = datetime.datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S +0900').replace(tzinfo=kst)
                     
                     title = BeautifulSoup(i['title'], 'html.parser').get_text()
-                    desc = i.get('description', '')
+                    desc = BeautifulSoup(i.get('description', ''), 'html.parser').get_text()
                     target_text = (title + desc).lower().replace(' ', '')
+                    
                     if (now - p_date).total_seconds() < self.time_limit:
                         if not any(ex.replace(' ', '').lower() in target_text for ex in self.total_exclude):
                             res.append({'src': label, 'kw': title, 'desc': desc, 'url': i.get('link')})
@@ -59,20 +64,24 @@ class ShuMonitorEngine:
             return res
 
         try:
-            # 1. 네이버 뉴스 & VIEW
+            # 1. 네이버 뉴스 (기존 키워드 유지)
             n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=20&sort=sim", headers=h).json()
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
-            n_view = requests.get("https://openapi.naver.com/v1/search/blog.json?query=논란 사건 사고&display=40&sort=date", headers=h).json()
             pool.extend(process_naver(n_sim.get('items', []), self.src_mapping['NAVER_SIM']))
             pool.extend(process_naver(n_date.get('items', []), self.src_mapping['NAVER_DATE']))
-            pool.extend(process_naver(n_view.get('items', []), self.src_mapping['NAVER_VIEW'], is_view=True))
+
+            # 2. 네이버 VIEW (요청하신 10개 개별 키워드 순회 수집)
+            for kw in self.view_keywords:
+                # 검색어에 광고 제외 파라미터 추가
+                v_res = requests.get(f"https://openapi.naver.com/v1/search/blog.json?query={kw} -홍보 -마케팅 -광고&display=15&sort=date", headers=h).json()
+                pool.extend(process_naver(v_res.get('items', []), f"{self.src_mapping['NAVER_VIEW']}_{kw}", is_view=True))
             
-            # 2. 고정 주제
+            # 3. 고정 주제
             for t in self.fixed_topics:
                 t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=25&sort=date", headers=h).json()
                 pool.extend(process_naver(t_n.get('items', []), f"🔥 {t} 이슈"))
             
-            # 3. 구글 트렌드 (XML 링크 에러 방지)
+            # 4. 구글 트렌드 (링크 수정 로직 유지)
             rss = requests.get("https://trends.google.com/trending/rss?geo=KR", headers=self.headers)
             items = BeautifulSoup(rss.text, 'xml').find_all('item')
             for i in items:
@@ -82,7 +91,7 @@ class ShuMonitorEngine:
                 if not any(ex.replace(' ', '').lower() in title.lower().replace(' ', '') for ex in self.total_exclude):
                     pool.append({'src': self.src_mapping['G_TRENDS'], 'kw': title, 'desc': '', 'url': link})
 
-            # 4. 커뮤니티 4종 (디시, 펨코, 더쿠, 인스티즈) + 다음, 네이트
+            # 5. 커뮤니티 4종 및 포털
             def generic_fetch(url, selector, label, base_url=""):
                 try:
                     res = requests.get(url, headers=self.headers, timeout=10)
@@ -98,13 +107,10 @@ class ShuMonitorEngine:
                     return out
                 except: return []
 
-            # 커뮤니티별 최적화된 베스트 게시판 경로
             pool.extend(generic_fetch("https://www.fmkorea.com/best", ".title.hotdeal_var8 a", self.src_mapping['FMKOREA'], "https://www.fmkorea.com")[:25])
             pool.extend(generic_fetch("https://www.dcinside.com/", ".box_best .list_best li a", self.src_mapping['DCINSIDE'])[:15])
             pool.extend(generic_fetch("https://theqoo.net/hot", ".title a", self.src_mapping['THEQOO'], "https://theqoo.net")[:20])
             pool.extend(generic_fetch("https://www.instiz.net/bbs/list.php?id=pt", ".st_title a", self.src_mapping['INSTIZ'], "https://www.instiz.net")[:20])
-            
-            # 포털 랭킹
             pool.extend(generic_fetch("https://news.daum.net/ranking/popular", ".link_txt", self.src_mapping['DAUM'])[:30])
             pool.extend(generic_fetch("https://news.nate.com/edit/issueup/", ".txt_tit", self.src_mapping['NATE'])[:15])
 
