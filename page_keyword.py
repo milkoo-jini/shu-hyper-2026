@@ -1,8 +1,8 @@
 import streamlit as st
 import time
 import re
+import requests
 from groq import Groq
-from tavily import TavilyClient
 from collections import deque
 
 def run_keyword():
@@ -25,10 +25,6 @@ def run_keyword():
         line = re.sub(r'^[\d\.\-\*\#\s]+', '', line)
         return line.strip()
 
-    def is_korean(text):
-        korean_chars = sum(1 for c in text if '\uAC00' <= c <= '\uD7A3')
-        return korean_chars / max(len(text), 1) >= 0.3
-
     def handle_api_error(e, seed):
         err = str(e)
         if "429" in err or "rate_limit" in err.lower():
@@ -41,6 +37,33 @@ def run_keyword():
             st.error(f"'{seed}' 실패 — 네트워크 차단 또는 IP 접근 불가.")
         else:
             st.error(f"'{seed}' 실패 — 알 수 없는 오류: {e}")
+
+    def search_naver_news(query, client_id, client_secret):
+        url = "https://openapi.naver.com/v1/search/news.json"
+        headers = {
+            "X-Naver-Client-Id": client_id,
+            "X-Naver-Client-Secret": client_secret
+        }
+        params = {
+            "query": query,
+            "display": 5,
+            "sort": "date"
+        }
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            return ""
+
+        items = response.json().get("items", [])
+        if not items:
+            return ""
+
+        news_context = ""
+        for item in items:
+            title = re.sub(r'<.*?>', '', item.get("title", ""))
+            description = re.sub(r'<.*?>', '', item.get("description", ""))
+            news_context += f"- {title}: {description}\n"
+
+        return news_context
 
     request_times = deque()
 
@@ -60,10 +83,11 @@ def run_keyword():
 
     with col_input:
         st.markdown("### 🎯 리스크 확장 설정")
-        st.info("최신 뉴스 검색 기반 실질적 위험 키워드 발굴")
+        st.info("네이버 뉴스 검색 기반 실질적 위험 키워드 발굴")
 
         groq_api_key = st.secrets.get("GROQ_API_KEY")
-        tavily_api_key = st.secrets.get("TAVILY_API_KEY")
+        naver_client_id = st.secrets.get("NAVER_ID")
+        naver_client_secret = st.secrets.get("NAVER_SECRET")
 
         target_text = st.text_area(
             "📡 대상 키워드 입력", height=250,
@@ -87,15 +111,14 @@ def run_keyword():
                 st.error("GROQ_API_KEY가 설정되지 않았습니다.")
                 return
 
-            if not tavily_api_key:
-                st.error("TAVILY_API_KEY가 설정되지 않았습니다.")
+            if not naver_client_id or not naver_client_secret:
+                st.error("NAVER_ID 또는 NAVER_SECRET이 설정되지 않았습니다.")
                 return
 
             try:
                 groq_client = Groq(api_key=groq_api_key)
-                tavily_client = TavilyClient(api_key=tavily_api_key)
             except Exception as e:
-                st.error(f"클라이언트 초기화 실패: {e}")
+                st.error(f"Groq 클라이언트 초기화 실패: {e}")
                 return
 
             seeds = [t.strip() for t in target_text.split('\n') if t.strip()]
@@ -115,52 +138,33 @@ def run_keyword():
                 try:
                     wait_for_rate_limit(status)
 
-                    # 1단계 Tavily로 한국 뉴스 검색
-                    search_result = tavily_client.search(
-                        query=f"{seed} 논란 의혹 수사 2026",
-                        search_depth="advanced",
-                        max_results=5,
-                        include_answer=True,
-                        include_domains=[
-                            "news.naver.com",
-                            "daum.net",
-                            "yonhapnews.co.kr",
-                            "yna.co.kr",
-                            "chosun.com",
-                            "joongang.co.kr",
-                            "hani.co.kr",
-                            "khan.co.kr",
-                            "ohmynews.com",
-                            "pressian.com",
-                            "mediatoday.co.kr",
-                            "newsis.com",
-                            "news1.kr",
-                            "kukinews.com",
-                            "seoul.co.kr"
-                        ]
+                    # 1단계 네이버 뉴스 검색
+                    news_context = search_naver_news(
+                        query=f"{seed} 논란 의혹 수사",
+                        client_id=naver_client_id,
+                        client_secret=naver_client_secret
                     )
 
-                    # 검색 결과 텍스트 추출
-                    news_context = ""
-                    if search_result.get("answer"):
-                        news_context += f"요약: {search_result['answer']}\n\n"
-                    for r in search_result.get("results", []):
-                        news_context += f"- {r.get('title', '')}: {r.get('content', '')[:200]}\n"
-
-                    # 한국어 뉴스 없으면 건너뜀
-                    if not news_context.strip() or not is_korean(news_context):
-                        st.warning(f"'{seed}' 관련 한국어 뉴스를 찾지 못했습니다. 건너뜁니다.")
+                    # 뉴스 없으면 건너뜀
+                    if not news_context.strip():
+                        st.warning(f"'{seed}' 관련 뉴스를 찾지 못했습니다. 건너뜁니다.")
                         continue
 
                     # 2단계 Groq로 키워드 발굴
                     prompt = f"""당신은 2026년 한국 이슈 관제 전문가입니다.
 
-아래는 '{seed}'에 대한 최신 한국 뉴스 검색 결과입니다.
+아래는 '{seed}'에 대한 최신 네이버 뉴스입니다.
 
 [최신 뉴스]
 {news_context}
 
-위 뉴스 맥락에 있는 내용만 기반으로 추가 모니터링이 필요한 확장 키워드를 발굴하세요.
+위 뉴스에서 명확히 확인된 이슈만 기반으로 키워드를 발굴하세요.
+
+[판단 기준]
+- 뉴스에 직접 언급된 사실만 키워드로 만들 것
+- 확신이 없으면 만들지 말 것
+- 10개보다 3개가 낫고, 3개보다 1개가 나음
+- 억지로 채우지 말 것
 
 [출력 규칙]
 - 띄어쓰기 없는 표준어 조합
@@ -169,19 +173,18 @@ def run_keyword():
 - 3자 이상 15자 이하
 - 실제 포털 검색창에 입력할 수 있는 자연스러운 조합
 - 수사·의혹·논란·어뷰징·도덕적 리스크·허위정보·여론 악용 가능성 중심
-- 최근 이슈에서 파생될 수 있는 키워드 포함
 - 일반 정보성·긍정 뉴스 제외
 - 뉴스에 없는 내용은 절대 만들지 말 것
 
 [출력 예시]
 {seed}수사
-{seed}구속
-{seed}선거법위반"""
+{seed}선거법위반
+{seed}여론조작의혹"""
 
                     response = groq_client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[{"role": "user", "content": prompt}],
-                        temperature=0.3
+                        temperature=0.1
                     )
 
                     result_text = response.choices[0].message.content
@@ -191,7 +194,7 @@ def run_keyword():
                             if 3 <= len(cleaned) <= 15:
                                 seen.add(cleaned)
                                 final_results.append(cleaned)
-                            
+
                 except Exception as e:
                     handle_api_error(e, seed)
 
