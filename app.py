@@ -12,7 +12,7 @@ class ShuMonitorEngine:
         except:
             self.naver_id = self.naver_secret = None
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        self.fixed_topics = ["월드컵", "지방선거"]
+        self.fixed_topics = ["북중미 월드컵", "지방선거"]
         
         # 슈 님이 지정하신 노이즈 차단 키워드 리스트
         self.exclude_ad_keywords = ["Who Is", "인물열전", "CEO스토리", "기업인사", "조언", "상담", "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", "법률사무소", "홍보", "마케팅", "기고"]
