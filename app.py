@@ -12,10 +12,13 @@ class ShuMonitorEngine:
         except:
             self.naver_id = self.naver_secret = None
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        self.fixed_topics = ["북중미 월드컵", "지방선거"]
+        self.fixed_topics = ["월드컵", "지방선거"]
         
-        # 슈 님이 지정하신 노이즈 차단 키워드 리스트
-        self.exclude_ad_keywords = ["Who Is","Who", "인물열전", "CEO스토리", "기업인사", "조언", "상담", "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", "법률사무소", "홍보", "마케팅", "기고"]
+        # [설정] 수집 범위 72시간
+        self.time_limit = 86400 * 3 
+        
+        # [필터] 광고/노이즈 키워드 (who 추가)
+        self.exclude_ad_keywords = ["Who Is", "who", "인물열전", "CEO스토리", "기업인사", "조언", "상담", "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", "법률사무소", "홍보", "마케팅", "기고"]
         self.base_exclude = ['방송', '출연', '방영', '예능', '드라마', '본방', '시청률', 'MC', '컴백', '데뷔', '무대', '가수', '아이돌', '솔로', '앨범', '차트', '관객수', '박스오피스', '영화관', '개봉', '제작보고회', '회상했다', '회고', '당시', '과거', '추억', '인터뷰', '성공 비결']
         self.total_exclude = list(set(self.base_exclude + self.exclude_ad_keywords))
         
@@ -34,7 +37,6 @@ class ShuMonitorEngine:
         now = datetime.datetime.now(kst)
         
         try:
-            # 네이버 관련도순/최신순 수집
             n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=20&sort=sim", headers=h).json()
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
             
@@ -45,11 +47,11 @@ class ShuMonitorEngine:
                         p_date = datetime.datetime.strptime(i['pubDate'], '%a, %d %b %Y %H:%M:%S +0900').replace(tzinfo=pytz.FixedOffset(540))
                         title = BeautifulSoup(i['title'], 'html.parser').get_text()
                         desc = i.get('description', '')
-                        full_text = (title + desc).replace(' ', '')
+                        # 대소문자 구분 없이 필터링하기 위해 소문자로 변환
+                        full_text_lower = (title + desc).replace(' ', '').lower()
                         
-                        # 24시간 이내 + 광고/노이즈 키워드 필터링 적용
-                        if (now - p_date).total_seconds() < 259200:
-                            if not any(ex in full_text for ex in self.total_exclude):
+                        if (now - p_date).total_seconds() < self.time_limit:
+                            if not any(ex.lower() in full_text_lower for ex in self.total_exclude):
                                 res.append({'src': label, 'kw': title, 'desc': desc, 'url': i['link']})
                     except: pass
                 return res
@@ -57,16 +59,13 @@ class ShuMonitorEngine:
             pool.extend(process_naver(n_sim.get('items', []), self.src_mapping['NAVER_SIM']))
             pool.extend(process_naver(n_date.get('items', []), self.src_mapping['NAVER_DATE']))
 
-            # 고정 주제 (월드컵, 지방선거) 수집 - 주제와 무관한 광고 필터링 강화
             for t in self.fixed_topics:
                 t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=25&sort=date", headers=h).json()
                 pool.extend(process_naver(t_n.get('items', []), f"🔥 {t} 이슈"))
 
-            # 시그널 수집
             sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
             pool.extend([{'src': self.src_mapping['SIGNAL'], 'kw': i['keyword'], 'desc': '', 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
 
-            # 구글 트렌드 & 뉴스 (24시간 필터 적용)
             for target in ['G_TRENDS', 'G_NEWS']:
                 url = "https://trends.google.com/trending/rss?geo=KR" if target == 'G_TRENDS' else "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
                 rss = requests.get(url, headers=self.headers)
@@ -74,11 +73,10 @@ class ShuMonitorEngine:
                 for i in items:
                     try:
                         p_date = datetime.datetime.strptime(i.pubDate.text[:25].strip(), '%a, %d %b %Y %H:%M:%S')
-                        if (datetime.datetime.utcnow() - p_date).total_seconds() < 259200:
+                        if (datetime.datetime.utcnow() - p_date).total_seconds() < self.time_limit:
                             pool.append({'src': self.src_mapping[target], 'kw': i.title.text, 'desc': '', 'url': i.link.text})
                     except: pass
 
-            # 기타 랭킹 이슈 영역
             d_res = requests.get("https://news.daum.net/ranking/popular", headers=self.headers)
             pool.extend([{'src': self.src_mapping['DAUM'], 'kw': a.text.strip(), 'desc': '', 'url': a.get('href')} for a in BeautifulSoup(d_res.text, 'html.parser').select('.link_txt')[:30]])
             
@@ -96,18 +94,16 @@ class ShuMonitorEngine:
 
         except: pass
         
-        # [최종 통합 필터링 및 중복 제거]
         seen, unique_pool = set(), []
         for item in pool:
             skel = re.sub(r'\s+', '', item['kw'])
-            full_text = (item['kw'] + item.get('desc', '')).replace(' ', '')
-            # 이미 process_naver에서 걸러졌으나 기타 채널 수집분을 위해 다시 한 번 체크
-            if skel not in seen and not any(ex in full_text for ex in self.total_exclude):
+            full_text_lower = (item['kw'] + item.get('desc', '')).replace(' ', '').lower()
+            if skel not in seen and not any(ex.lower() in full_text_lower for ex in self.total_exclude):
                 seen.add(skel); unique_pool.append(item)
         
         return sorted(unique_pool, key=lambda x: 0 if '이슈' in x['src'] or '🔥' in x['src'] else 1)
 
-# --- UI 레이아웃 (규격 및 스타일 엄수) ---
+# --- UI 레이아웃 ---
 st.set_page_config(layout="wide", page_title="실시간 이슈 모니터링")
 st.markdown("""<style>
     .block-container { padding-top: 1.5rem !important; }
@@ -122,7 +118,6 @@ st.markdown("""<style>
 if 'data_pool' not in st.session_state: st.session_state.data_pool = []
 if 'editor_key' not in st.session_state: st.session_state.editor_key = 0
 
-# 상단 컨트롤 영역
 c1, c2, c3, c4 = st.columns([2.5, 1, 1, 0.8])
 with c1: st.markdown("### 🔍 실시간 이슈 모니터링")
 with c2:
@@ -162,7 +157,9 @@ if st.session_state.data_pool:
             "선택": st.column_config.CheckboxColumn("선택", width=65)
         },
         column_order=("수집시점", "src", "kw", "url", "선택"),
-        hide_index=True, use_container_width=True, key=f"editor_{st.session_state.editor_key}"
+        hide_index=True, use_container_width=True, 
+        height=600,
+        key=f"editor_{st.session_state.editor_key}"
     )
 
     if not edited_df[edited_df['선택'] == True].empty:
