@@ -180,15 +180,20 @@ class ShuMonitorEngine:
         except:
             pass
 
-        # 3. 네이버 뉴스 — 쿼리별 분리, sim만 수집 (중복 최소화)
+        # 3. 네이버 뉴스 — 쿼리별 분리, sim+date 둘 다 수집
         for q in self.naver_queries:
             eq = urllib.parse.quote(q)
             try:
-                sim = requests.get(
+                sim  = requests.get(
                     f"https://openapi.naver.com/v1/search/news.json?query={eq}&display=20&sort=sim",
                     headers=h, timeout=5
                 ).json()
-                pool.extend(self._process_naver(sim.get('items', []), self.src_mapping['NAVER_SIM']))
+                date = requests.get(
+                    f"https://openapi.naver.com/v1/search/news.json?query={eq}&display=20&sort=date",
+                    headers=h, timeout=5
+                ).json()
+                pool.extend(self._process_naver(sim.get('items',  []), self.src_mapping['NAVER_SIM']))
+                pool.extend(self._process_naver(date.get('items', []), self.src_mapping['NAVER_DATE']))
             except:
                 pass
 
@@ -253,9 +258,14 @@ class ShuMonitorEngine:
         st.dataframe(debug_df, hide_index=True)
         st.markdown(f"**전체 수집: {len(pool)}건 / 중복제거 후: {len(unique_pool)}건**")
 
-        # 정렬: 시그널·줌·고정주제·주요이슈 최상단
-        priority = ['📶', '🔵', '🔥', '📢']
-        return sorted(unique_pool, key=lambda x: 0 if any(k in x['src'] for k in priority) else 1)
+        # 정렬: 고정주제(🔥) 1순위 > 네이버 실시간(⏱️) 2순위 > 나머지
+        def sort_key(x):
+            if '🔥' in x['src']:
+                return 0
+            if '⏱️' in x['src']:
+                return 1
+            return 2
+        return sorted(unique_pool, key=sort_key)
 
 
 # ----------------------------------------------------------------
