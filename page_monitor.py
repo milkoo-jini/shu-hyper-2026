@@ -270,19 +270,26 @@ class ShuMonitorEngine:
 def run_monitor():
     st.markdown("""
         <style>
-            [data-testid="stHeader"],
+            /* 1. 상단 장식 바만 숨기고 헤더 영역은 기본값으로 복구 (사이드바 버튼 노출을 위해) */
             [data-testid="stDecoration"],
-            [data-testid="stToolbar"],
-            header[data-testid="stHeader"] {
+            [data-testid="stToolbar"] {
                 display: none !important;
                 height: 0 !important;
             }
 
-            .main .block-container {
-                padding-top: 2.5rem !important;
-                margin-top: 0 !important;
-                max-width: 95% !important;
+            /* 2. 사이드바 제어 버튼(>, <<) 및 사이드바 영역 강제 표시 */
+            [data-testid="collapsedControl"] {
+                display: block !important;
             }
+            
+            /* 3. 메인 화면 여백 및 폭 최적화 (사이드바가 나와도 넓게 보이도록) */
+            .main .block-container {
+                padding-top: 2rem !important;
+                margin-top: 0 !important;
+                max-width: 98% !important; /* 사이드바 공간 고려하여 살짝 조정 */
+            }
+
+            /* 4. 상태 배지 스타일 유지 */
             .status-badge {
                 background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
                 padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold;
