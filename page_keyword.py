@@ -7,7 +7,7 @@ from google.genai import types
 from collections import deque
 
 def run_keyword():
-    st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allow_html=True)
+    st.markdown("<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True)
 
     with st.sidebar:
         st.markdown("### 🔐 관리자 인증")
