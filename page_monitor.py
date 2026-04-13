@@ -22,50 +22,52 @@ class ShuMonitorEngine:
             'Referer': 'https://www.google.com/',
         }
         self.kst = pytz.timezone('Asia/Seoul')
-        self.time_limit = 86400 * 1
+        self.time_limit = 86400 * 3
 
         # 고정 주제 (항상 포함)
         self.fixed_topics = ["북중미 월드컵", "지방선거"]
 
-        # 네이버 API 검색 쿼리 — 부정적 이슈 중심으로 쿼리별 분리
+        # 네이버 API 검색 쿼리
+        # 정치·사회 광범위 이슈는 구글 트렌드에서 커버
+        # 네이버는 업무 관련 + 사건사고 위주로만
         self.naver_queries = [
-            # 온라인 불법 유통·판매
-            "불법판매 적발",
-            "가품 위조 적발",
-            "불법 유통 단속",
-            "해외직구 불법",
-            "온라인 불법",
-            # 사기·기망 수법
-            "투자사기 피해",
-            "온라인 사기 적발",
-            "중고거래 사기",
-            "사칭 사기",
-            "딥페이크 피해",
-            "피싱 해킹",
-            # 플랫폼·이커머스 위반
+            # 업무 핵심 — 플랫폼·이커머스 제재
             "공정위 과징금",
             "공정위 시정명령",
-            "플랫폼 불법",
-            "이커머스 위반",
+            "공정위 적발",
             "허위광고 적발",
             "다크패턴",
-            # 식의약품
+            # 업무 핵심 — 식의약품
             "식약처 적발",
             "식약처 회수",
-            "불법 의약품",
-            "건기식 불법",
-            # 개인정보·보안
+            "불법 의약품 유통",
+            "건강기능식품 불법",
+            # 업무 핵심 — 온라인 불법 유통
+            "불법판매 적발",
+            "가품 위조 적발",
+            "온라인 불법 유통",
+            "해외직구 불법",
+            # 업무 핵심 — 사기·기망
+            "투자사기 적발",
+            "온라인 사기 적발",
+            "중고거래 사기",
+            "사칭 광고 적발",
+            "딥페이크 적발",
+            "피싱 악성앱",
+            # 업무 핵심 — 개인정보·보안
             "개인정보 유출",
-            "악성앱 피해",
             "대포통장 적발",
-            # 사회적 이슈 (광범위)
-            "논란 의혹",
-            "집단 피해",
-            "소비자 피해",
-            "사기 피해자",
-            # 재난·긴급
+            # 사건사고
+            "먹튀 피해",
+            "폐업 환불 거부",
+            "사기사이트 적발",
+            "마약 유통 적발",
+            "집단 피해 신고",
+            "소비자 피해 급증",
+            # 재난·긴급 (날씨·사고)
             "긴급 재난",
             "기상 경보",
+            "대형 사고",
         ]
 
         # 제외 단어 — 광고·홍보·단순정보성 노이즈
@@ -299,25 +301,19 @@ class ShuMonitorEngine:
 def run_monitor():
     st.markdown("""
         <style>
-            /* 1. 사이드바 제어 버튼(>, <<)을 다시 보이게 합니다 */
-            [data-testid="collapsedControl"] {
-                display: block !important;
-                visibility: visible !important;
-            }
-
-            /* 2. 상단 헤더 영역을 살려야 화살표 버튼이 클릭됩니다 */
+            [data-testid="stHeader"],
+            [data-testid="stDecoration"],
+            [data-testid="stToolbar"],
             header[data-testid="stHeader"] {
-                display: block !important;
-                background-color: rgba(0,0,0,0) !important; /* 투명하게 설정 */
+                display: none !important;
+                height: 0 !important;
             }
 
-            /* 3. 화면 구성 최적화 */
             .main .block-container {
-                padding-top: 3rem !important;
+                padding-top: 2.5rem !important;
+                margin-top: 0 !important;
                 max-width: 95% !important;
             }
-
-            /* 상태 배지 스타일 */
             .status-badge {
                 background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
                 padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold;
