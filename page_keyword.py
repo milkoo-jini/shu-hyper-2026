@@ -7,6 +7,8 @@ from google.genai import types
 from collections import deque
 
 def run_keyword():
+    st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allow_html=True)
+
     with st.sidebar:
         st.markdown("### 🔐 관리자 인증")
         password = st.text_input("접속 비밀번호", type="password", label_visibility="collapsed", placeholder="비밀번호 입력")
@@ -93,7 +95,7 @@ def run_keyword():
 
         target_text = st.text_area(
             "키워드",
-            height=420,
+            height=340,
             placeholder="정원오\n오월드늑대\n슈퍼주니어사고\n\n한 줄에 하나씩 입력하세요.",
             label_visibility="collapsed"
         )
