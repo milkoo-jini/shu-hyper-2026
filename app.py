@@ -48,7 +48,7 @@ class ShuMonitorEngine:
                         full_text = (title + desc).replace(' ', '')
                         
                         # 24시간 이내 + 광고/노이즈 키워드 필터링 적용
-                        if (now - p_date).total_seconds() < 86400:
+                        if (now - p_date).total_seconds() < 259200:
                             if not any(ex in full_text for ex in self.total_exclude):
                                 res.append({'src': label, 'kw': title, 'desc': desc, 'url': i['link']})
                     except: pass
@@ -74,7 +74,7 @@ class ShuMonitorEngine:
                 for i in items:
                     try:
                         p_date = datetime.datetime.strptime(i.pubDate.text[:25].strip(), '%a, %d %b %Y %H:%M:%S')
-                        if (datetime.datetime.utcnow() - p_date).total_seconds() < 86400:
+                        if (datetime.datetime.utcnow() - p_date).total_seconds() < 259200:
                             pool.append({'src': self.src_mapping[target], 'kw': i.title.text, 'desc': '', 'url': i.link.text})
                     except: pass
 
