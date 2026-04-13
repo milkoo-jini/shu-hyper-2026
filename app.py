@@ -114,7 +114,7 @@ if 'data_pool' not in st.session_state: st.session_state.data_pool = []
 if 'editor_key' not in st.session_state: st.session_state.editor_key = 0
 
 c1, c2, c3, c4 = st.columns([2.5, 1, 1, 0.8])
-with c1: st.markdown("### 🔍 실시간 통합 이슈 모니터링")
+with c1: st.markdown("### 🔍 실시간 이슈 모니터링")
 with c2:
     if st.button("🚀 전체 채널 스캔", use_container_width=True):
         st.session_state.data_pool = [dict(d, 선택=True) for d in ShuMonitorEngine().fetch_all_routes()]
