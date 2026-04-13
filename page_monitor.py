@@ -15,15 +15,16 @@ class ShuMonitorEngine:
         self.fixed_topics = ["북중미 월드컵", "지방선거"]
         self.time_limit = 86400 * 3 
         
-        # VIEW 전용 특화 키워드
+        # [VIEW 전용] 타겟 키워드
         self.view_keywords = ["사기", "먹튀", "폐업", "연락두절", "사기사이트", "불법유통", "위조", "도용", "쇼핑몰피해", "서비스종료"]
         
-        # 제외 단어 리스트
+        # [강력 차단] 어뷰징/광고 패턴 (VIEW 영역 집중 타겟)
         self.exclude_ad_keywords = [
             "who is", "who", "인물열전", "ceo스토리", "기업인사", "조언", "상담", 
-            "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", 
-            "법률사무소", "홍보", "마케팅", "기고", "대처법", "준비법", "대응방법",
-            "e종목", "클릭", "주년", "탄생", "쇼룸", "무료증정", "이벤트", "모집"
+            "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", "법률사무소",
+            "홍보", "마케팅", "기고", "대처법", "준비법", "대응방법", "성공사례", "무료진단",
+            "해결사", "카톡문의", "직통전화", "전화번호", "실력있는", "알아보고있다면",
+            "e종목", "클릭", "주년", "탄생", "쇼룸", "무료증정", "이벤트", "모집", "체험단"
         ]
         self.base_exclude = ['방송', '출연', '방영', '예능', '드라마', '본방', '시청률', 'mc', '컴백', '데뷔', '무대', '가수', '아이돌', '솔로', '앨범', '차트', '관객수', '박스오피스', '영화관', '개봉', '제작보고회', '회상했다', '회고', '당시', '과거', '추억', '인터뷰', '성공 비결']
         self.total_exclude = [word.lower() for word in (self.base_exclude + self.exclude_ad_keywords)]
@@ -55,25 +56,28 @@ class ShuMonitorEngine:
                     
                     title = BeautifulSoup(i['title'], 'html.parser').get_text()
                     desc = BeautifulSoup(i.get('description', ''), 'html.parser').get_text()
+                    # 제목과 본문을 합쳐서 공백 제거 후 소문자로 변환 (필터링 효율 극대화)
                     target_text = (title + desc).lower().replace(' ', '')
                     
                     if (now - p_date).total_seconds() < self.time_limit:
+                        # 어뷰징 키워드가 단 하나라도 포함되면 즉시 제외
                         if not any(ex.replace(' ', '').lower() in target_text for ex in self.total_exclude):
                             res.append({'src': label, 'kw': title, 'desc': desc, 'url': i.get('link')})
                 except: pass
             return res
 
         try:
-            # 1. 네이버 뉴스 (기존 키워드 유지)
+            # 1. 네이버 뉴스
             n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=20&sort=sim", headers=h).json()
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
             pool.extend(process_naver(n_sim.get('items', []), self.src_mapping['NAVER_SIM']))
             pool.extend(process_naver(n_date.get('items', []), self.src_mapping['NAVER_DATE']))
 
-            # 2. 네이버 VIEW (요청하신 10개 개별 키워드 순회 수집)
+            # 2. [강화] 네이버 VIEW 개별 키워드 순회 (검색 단계 필터링 강화)
             for kw in self.view_keywords:
-                # 검색어에 광고 제외 파라미터 추가
-                v_res = requests.get(f"https://openapi.naver.com/v1/search/blog.json?query={kw} -홍보 -마케팅 -광고&display=15&sort=date", headers=h).json()
+                # 검색 쿼리 자체에 부정 연산자 추가하여 어뷰징 원천 차단 시도
+                v_url = f"https://openapi.naver.com/v1/search/blog.json?query={kw} -홍보 -마케팅 -상담 -광고 -모집 -추천&display=15&sort=date"
+                v_res = requests.get(v_url, headers=h).json()
                 pool.extend(process_naver(v_res.get('items', []), f"{self.src_mapping['NAVER_VIEW']}_{kw}", is_view=True))
             
             # 3. 고정 주제
@@ -91,7 +95,7 @@ class ShuMonitorEngine:
                 if not any(ex.replace(' ', '').lower() in title.lower().replace(' ', '') for ex in self.total_exclude):
                     pool.append({'src': self.src_mapping['G_TRENDS'], 'kw': title, 'desc': '', 'url': link})
 
-            # 5. 커뮤니티 4종 및 포털
+            # 5. 커뮤니티 4종 (선택자 및 경로 유지)
             def generic_fetch(url, selector, label, base_url=""):
                 try:
                     res = requests.get(url, headers=self.headers, timeout=10)
