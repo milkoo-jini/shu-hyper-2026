@@ -238,6 +238,13 @@ class ShuMonitorEngine:
                 seen.add(skel)
                 unique_pool.append(item)
 
+        # 디버그: 채널별 수집 건수 표시
+        debug_df = pd.Series([i['src'] for i in pool]).value_counts().reset_index()
+        debug_df.columns = ['채널', '수집건수']
+        st.markdown("#### 🔎 채널별 수집 현황 (디버그)")
+        st.dataframe(debug_df, hide_index=True)
+        st.markdown(f"**전체 수집: {len(pool)}건 / 중복제거 후: {len(unique_pool)}건**")
+
         # 정렬: 시그널·줌·고정주제·주요이슈 최상단
         priority = ['📶', '🔵', '🔥', '📢']
         return sorted(unique_pool, key=lambda x: 0 if any(k in x['src'] for k in priority) else 1)
