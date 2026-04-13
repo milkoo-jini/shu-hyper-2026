@@ -14,7 +14,12 @@ class ShuMonitorEngine:
             self.naver_id = self.naver_secret = None
 
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Referer': 'https://www.google.com/',
         }
         self.kst = pytz.timezone('Asia/Seoul')
         self.time_limit = 86400 * 3
@@ -230,13 +235,16 @@ class ShuMonitorEngine:
             except:
                 pass
 
-        # 7. 다음·네이트
-        pool.extend(self._generic_fetch("https://news.daum.net/ranking/popular", ".link_txt", self.src_mapping['DAUM'], limit=30))
-        pool.extend(self._generic_fetch("https://news.nate.com/edit/issueup/",    ".txt_tit",  self.src_mapping['NATE'], limit=15))
+        # 7. 다음 뉴스 (URL 변경됨)
+        pool.extend(self._generic_fetch("https://news.daum.net/",  "a.link_txt",          self.src_mapping['DAUM'], limit=30))
+        pool.extend(self._generic_fetch("https://news.daum.net/",  ".tit_thumb",          self.src_mapping['DAUM'], limit=30))
 
-        # 8. 커뮤니티 — 에펨/디시 유지 (더쿠·인스티즈는 연예 노이즈 비중 높아 제거)
-        pool.extend(self._generic_fetch("https://www.fmkorea.com/best",  ".title.hotdeal_var8 a",     self.src_mapping['FMKOREA'],  "https://www.fmkorea.com", limit=25))
-        pool.extend(self._generic_fetch("https://www.dcinside.com/",     ".box_best .list_best li a", self.src_mapping['DCINSIDE'], limit=15))
+        # 8. 네이트 뉴스
+        pool.extend(self._generic_fetch("https://news.nate.com/",  ".tit a",              self.src_mapping['NATE'], limit=15))
+        pool.extend(self._generic_fetch("https://news.nate.com/",  ".news_tit a",         self.src_mapping['NATE'], limit=15))
+
+        # 9. 에펨·디시·시그널·줌은 Streamlit Cloud에서 IP 차단되어 수집 불가
+        # 추후 로컬 환경에서만 사용하거나 API 대체 필요
 
         # 중복 제거
         seen, unique_pool = set(), []
@@ -274,6 +282,12 @@ def run_monitor():
                 display: none !important;
                 height: 0 !important;
             }
+            /* 사이드바 접기 버튼 숨기기 */
+            [data-testid="collapsedControl"],
+            button[kind="header"][aria-label="Close sidebar"],
+            .st-emotion-cache-1egp75f { 
+                display: none !important; 
+            }
             .main .block-container {
                 padding-top: 2.5rem !important;
                 margin-top: 0 !important;
@@ -290,13 +304,27 @@ def run_monitor():
     if 'data_pool'  not in st.session_state: st.session_state.data_pool  = []
     if 'editor_key' not in st.session_state: st.session_state.editor_key = 0
 
-    st.markdown("### 🔍 실시간 이슈 모니터링")
+    # 로딩 상태 초기화
+    if 'is_scanning' not in st.session_state: st.session_state.is_scanning = False
+
+    # 제목 + 로딩 이모지
+    if st.session_state.is_scanning:
+        st.markdown("### 🔍 실시간 이슈 모니터링 &nbsp; ⏳ 스캔 중...")
+    else:
+        st.markdown("### 🔍 실시간 이슈 모니터링")
 
     c1, c2, c3 = st.columns([1, 1, 0.8])
     with c1:
         if st.button("🚀 전체 채널 스캔", use_container_width=True):
+            st.session_state.is_scanning = True
+            st.rerun()
+
+    # 스캔 실행 (rerun 후 처리)
+    if st.session_state.is_scanning:
+        with st.spinner("채널 스캔 중입니다..."):
             st.session_state.data_pool = [dict(d, 선택=True) for d in ShuMonitorEngine().fetch_all_routes()]
             st.session_state.editor_key += 1
+            st.session_state.is_scanning = False
             st.rerun()
     with c2:
         filter_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
