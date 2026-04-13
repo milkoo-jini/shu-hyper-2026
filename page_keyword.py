@@ -2,7 +2,8 @@ import streamlit as st
 import time
 import re
 import requests
-from groq import Groq
+from google import genai
+from google.genai import types
 from collections import deque
 
 def run_keyword():
@@ -27,43 +28,45 @@ def run_keyword():
 
     def handle_api_error(e, seed):
         err = str(e)
-        if "429" in err or "rate_limit" in err.lower():
+        if "429" in err or "RESOURCE_EXHAUSTED" in err:
             st.error(f"'{seed}' 실패 — 사용량 한도 초과. 잠시 후 재시도하세요.")
-        elif "401" in err or "invalid_api_key" in err.lower():
-            st.error(f"'{seed}' 실패 — API 키 오류. 키를 확인하세요.")
-        elif "503" in err or "unavailable" in err.lower():
-            st.error(f"'{seed}' 실패 — 서버 일시 불가. 잠시 후 재시도하세요.")
+        elif "403" in err or "PERMISSION_DENIED" in err:
+            st.error(f"'{seed}' 실패 — API 키 차단 또는 권한 없음. 키를 확인하세요.")
+        elif "400" in err or "INVALID_ARGUMENT" in err:
+            st.error(f"'{seed}' 실패 — 잘못된 요청입니다.")
+        elif "503" in err or "UNAVAILABLE" in err:
+            st.error(f"'{seed}' 실패 — Gemini 서버 일시 불가. 잠시 후 재시도하세요.")
         elif "ConnectionError" in err or "connect" in err.lower():
             st.error(f"'{seed}' 실패 — 네트워크 차단 또는 IP 접근 불가.")
         else:
             st.error(f"'{seed}' 실패 — 알 수 없는 오류: {e}")
 
     def search_naver_news(query, client_id, client_secret):
-        url = "https://openapi.naver.com/v1/search/news.json"
-        headers = {
-            "X-Naver-Client-Id": client_id,
-            "X-Naver-Client-Secret": client_secret
-        }
-        params = {
-            "query": query,
-            "display": 5,
-            "sort": "date"
-        }
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code != 200:
+        try:
+            url = "https://openapi.naver.com/v1/search/news.json"
+            headers = {
+                "X-Naver-Client-Id": client_id,
+                "X-Naver-Client-Secret": client_secret
+            }
+            params = {
+                "query": query,
+                "display": 5,
+                "sort": "date"
+            }
+            response = requests.get(url, headers=headers, params=params)
+            if response.status_code != 200:
+                return ""
+            items = response.json().get("items", [])
+            if not items:
+                return ""
+            news_context = ""
+            for item in items:
+                title = re.sub(r'<.*?>', '', item.get("title", ""))
+                description = re.sub(r'<.*?>', '', item.get("description", ""))
+                news_context += f"- {title}: {description}\n"
+            return news_context
+        except:
             return ""
-
-        items = response.json().get("items", [])
-        if not items:
-            return ""
-
-        news_context = ""
-        for item in items:
-            title = re.sub(r'<.*?>', '', item.get("title", ""))
-            description = re.sub(r'<.*?>', '', item.get("description", ""))
-            news_context += f"- {title}: {description}\n"
-
-        return news_context
 
     request_times = deque()
 
@@ -71,11 +74,11 @@ def run_keyword():
         now = time.time()
         while request_times and now - request_times[0] >= 60:
             request_times.popleft()
-        if len(request_times) >= 30:
+        if len(request_times) >= 28:
             wait_sec = 60 - (now - request_times[0])
             if wait_sec > 0:
                 for remaining in range(int(wait_sec), 0, -1):
-                    status_placeholder.warning(f"⏳ Groq 분당 한도 도달 — {remaining}초 후 재개...")
+                    status_placeholder.warning(f"⏳ API 분당 한도 도달 — {remaining}초 후 재개...")
                     time.sleep(1)
         request_times.append(time.time())
 
@@ -83,9 +86,9 @@ def run_keyword():
 
     with col_input:
         st.markdown("### 🎯 리스크 확장 설정")
-        st.info("네이버 뉴스 검색 기반 실질적 위험 키워드 발굴")
+        st.info("네이버 뉴스 + Gemini Google Search 기반 위험 키워드 발굴")
 
-        groq_api_key = st.secrets.get("GROQ_API_KEY")
+        gemini_api_key = st.secrets.get("GEMINI_API_KEY")
         naver_client_id = st.secrets.get("NAVER_ID")
         naver_client_secret = st.secrets.get("NAVER_SECRET")
 
@@ -107,18 +110,14 @@ def run_keyword():
                 st.warning("분석할 단어를 입력하세요.")
                 return
 
-            if not groq_api_key:
-                st.error("GROQ_API_KEY가 설정되지 않았습니다.")
-                return
-
-            if not naver_client_id or not naver_client_secret:
-                st.error("NAVER_ID 또는 NAVER_SECRET이 설정되지 않았습니다.")
+            if not gemini_api_key:
+                st.error("GEMINI_API_KEY가 설정되지 않았습니다.")
                 return
 
             try:
-                groq_client = Groq(api_key=groq_api_key)
+                client = genai.Client(api_key=gemini_api_key)
             except Exception as e:
-                st.error(f"Groq 클라이언트 초기화 실패: {e}")
+                st.error(f"Gemini 클라이언트 초기화 실패: {e}")
                 return
 
             seeds = [t.strip() for t in target_text.split('\n') if t.strip()]
@@ -138,32 +137,45 @@ def run_keyword():
                 try:
                     wait_for_rate_limit(status)
 
-                    # 1단계 네이버 뉴스 검색
-                    news_context = search_naver_news(
-                        query=f"{seed} 논란 의혹 수사",
-                        client_id=naver_client_id,
-                        client_secret=naver_client_secret
-                    )
+                    # 1단계 네이버 뉴스 검색 (없어도 계속 진행)
+                    news_context = ""
 
-                    # 뉴스 없으면 건너뜀
-                    if not news_context.strip():
-                        st.warning(f"'{seed}' 관련 뉴스를 찾지 못했습니다. 건너뜁니다.")
-                        continue
+                    if naver_client_id and naver_client_secret:
+                        # 1차 시드만으로 검색
+                        news_context += search_naver_news(
+                            query=seed,
+                            client_id=naver_client_id,
+                            client_secret=naver_client_secret
+                        )
+                        # 2차 논란 의혹 수사 붙여서 검색
+                        news_context += search_naver_news(
+                            query=f"{seed} 논란 의혹 수사",
+                            client_id=naver_client_id,
+                            client_secret=naver_client_secret
+                        )
 
-                    # 2단계 Groq로 키워드 발굴
+                    # 2단계 Gemini로 키워드 발굴
+                    # 네이버 뉴스 있으면 맥락에 포함, 없으면 Gemini Google Search만으로 발굴
+                    if news_context.strip():
+                        naver_section = f"""
+아래는 네이버에서 수집한 최신 뉴스입니다. 이 내용을 참고하되, Google Search로 추가 맥락도 파악하세요.
+
+[네이버 뉴스]
+{news_context}
+"""
+                    else:
+                        naver_section = "네이버 뉴스 검색 결과가 없습니다. Google Search로 최신 이슈를 직접 파악하세요."
+
                     prompt = f"""당신은 2026년 한국 이슈 관제 전문가입니다.
 
-아래는 '{seed}'에 대한 최신 네이버 뉴스입니다.
+'{seed}'와 관련된 최신 이슈를 파악하고 추가 모니터링이 필요한 확장 키워드를 발굴하세요.
 
-[최신 뉴스]
-{news_context}
-
-위 뉴스에서 명확히 확인된 이슈만 기반으로 키워드를 발굴하세요.
+{naver_section}
 
 [판단 기준]
-- 뉴스에 직접 언급된 사실만 키워드로 만들 것
+- 실제 뉴스에서 확인된 사실만 키워드로 만들 것
 - 확신이 없으면 만들지 말 것
-- 10개보다 3개가 낫고, 3개보다 1개가 나음
+- 10개보다 3개가 낫고 3개보다 1개가 나음
 - 억지로 채우지 말 것
 
 [출력 규칙]
@@ -174,21 +186,23 @@ def run_keyword():
 - 실제 포털 검색창에 입력할 수 있는 자연스러운 조합
 - 수사·의혹·논란·어뷰징·도덕적 리스크·허위정보·여론 악용 가능성 중심
 - 일반 정보성·긍정 뉴스 제외
-- 뉴스에 없는 내용은 절대 만들지 말 것
+- 확인되지 않은 내용은 절대 만들지 말 것
 
 [출력 예시]
 {seed}수사
 {seed}선거법위반
 {seed}여론조작의혹"""
 
-                    response = groq_client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.1
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            tools=[types.Tool(google_search=types.GoogleSearch())]
+                        )
                     )
 
-                    result_text = response.choices[0].message.content
-                    for line in result_text.strip().split('\n'):
+                    result_text = response.text.strip()
+                    for line in result_text.split('\n'):
                         cleaned = clean_line(line)
                         if cleaned and cleaned not in seen:
                             if 3 <= len(cleaned) <= 15:
