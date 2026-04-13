@@ -7,5 +7,4 @@ lxml
 pytz
 xlsxwriter
 scikit-learn
-streamlit
 google-genai
