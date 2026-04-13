@@ -12,7 +12,7 @@ class ShuMonitorEngine:
         except:
             self.naver_id = self.naver_secret = None
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        self.fixed_topics = ["월드컵", "지방선거"]
+        self.fixed_topics = ["북중미 월드컵", "지방선거"]
         
         # [설정] 수집 범위 72시간
         self.time_limit = 86400 * 3 
