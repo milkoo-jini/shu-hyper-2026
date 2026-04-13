@@ -11,11 +11,10 @@ class ShuMonitorEngine:
             self.naver_secret = st.secrets["NAVER_SECRET"]
         except:
             self.naver_id = self.naver_secret = None
-        self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
         self.fixed_topics = ["북중미 월드컵", "지방선거"]
         self.time_limit = 86400 * 3 
         
-        # 제외 단어 리스트
         self.exclude_ad_keywords = [
             "who is", "who", "인물열전", "ceo스토리", "기업인사", "조언", "상담", 
             "변호사", "법무법인", "선임", "상담문의", "전문가", "무료상담", "승소", 
@@ -27,10 +26,11 @@ class ShuMonitorEngine:
         
         self.src_mapping = {
             'NAVER_DATE': '⏱️ 실시간 뉴스', 'NAVER_SIM': '📢 주요 이슈(네이버)',
-            'SIGNAL': '📈 급상승 시그널', 'G_TRENDS': '🌐 구글 트렌드',
-            'G_NEWS': '📰 구글 뉴스', 'DAUM': '🟠 다음 인기',
-            'NATE': '🔴 네이트 이슈', 'ZUM': '🔵 줌 실검',
-            'FMKOREA': '⚽ 에펨코리아(베스트)', 'DCINSIDE': '🖼️ 디시인사이드'
+            'NAVER_VIEW': '🔍 네이버 VIEW(블로그/카페)', 'SIGNAL': '📈 급상승 시그널', 
+            'G_TRENDS': '🌐 구글 트렌드', 'G_NEWS': '📰 구글 뉴스', 
+            'DAUM': '🟠 다음 인기', 'NATE': '🔴 네이트 이슈', 
+            'FMKOREA': '⚽ 에펨코리아(포텐)', 'DCINSIDE': '🖼️ 디시인사이드(실베)',
+            'THEQOO': '🍵 더쿠(HOT)', 'INSTIZ': '🎀 인스티즈(이슈)'
         }
 
     def fetch_all_routes(self):
@@ -39,76 +39,77 @@ class ShuMonitorEngine:
         kst = pytz.timezone('Asia/Seoul')
         now = datetime.datetime.now(kst)
         
-        # 필터링 통합 함수
-        def process_naver(items, label):
+        def process_naver(items, label, is_view=False):
             res = []
             for i in items:
                 try:
-                    p_date = datetime.datetime.strptime(i['pubDate'], '%a, %d %b %Y %H:%M:%S +0900').replace(tzinfo=kst)
+                    date_str = i.get('postdate') if is_view else i.get('pubDate')
+                    if is_view:
+                        p_date = datetime.datetime.strptime(date_str, '%Y%m%d').replace(tzinfo=kst)
+                    else:
+                        p_date = datetime.datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S +0900').replace(tzinfo=kst)
+                    
                     title = BeautifulSoup(i['title'], 'html.parser').get_text()
                     desc = i.get('description', '')
                     target_text = (title + desc).lower().replace(' ', '')
                     if (now - p_date).total_seconds() < self.time_limit:
-                        # [핵심] 고정 주제도 여기서 걸러집니다
                         if not any(ex.replace(' ', '').lower() in target_text for ex in self.total_exclude):
-                            res.append({'src': label, 'kw': title, 'desc': desc, 'url': i['link']})
+                            res.append({'src': label, 'kw': title, 'desc': desc, 'url': i.get('link')})
                 except: pass
             return res
 
         try:
-            # 1. 네이버 기본 뉴스
+            # 1. 네이버 뉴스 & VIEW
             n_sim = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=20&sort=sim", headers=h).json()
             n_date = requests.get("https://openapi.naver.com/v1/search/news.json?query=논란 사건 사고&display=50&sort=date", headers=h).json()
+            n_view = requests.get("https://openapi.naver.com/v1/search/blog.json?query=논란 사건 사고&display=40&sort=date", headers=h).json()
             pool.extend(process_naver(n_sim.get('items', []), self.src_mapping['NAVER_SIM']))
             pool.extend(process_naver(n_date.get('items', []), self.src_mapping['NAVER_DATE']))
+            pool.extend(process_naver(n_view.get('items', []), self.src_mapping['NAVER_VIEW'], is_view=True))
             
-            # 2. 고정 주제 (이제 검역소 process_naver를 똑같이 통과함)
+            # 2. 고정 주제
             for t in self.fixed_topics:
                 t_n = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={t}&display=25&sort=date", headers=h).json()
                 pool.extend(process_naver(t_n.get('items', []), f"🔥 {t} 이슈"))
             
-            # 3. 시그널, 구글 등 기타 채널
-            sig = requests.get("https://api.signal.bz/news/realtime", headers=self.headers).json()
-            pool.extend([{'src': self.src_mapping['SIGNAL'], 'kw': i['keyword'], 'desc': '', 'url': f"https://search.naver.com/search.naver?query={i['keyword']}"} for i in sig.get('top10', [])])
-            
-            for target in ['G_TRENDS', 'G_NEWS']:
-                url = "https://trends.google.com/trending/rss?geo=KR" if target == 'G_TRENDS' else "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
-                rss = requests.get(url, headers=self.headers)
-                items = BeautifulSoup(rss.text, 'xml').find_all('item')
-                for i in items:
-                    try:
-                        p_date = datetime.datetime.strptime(i.pubDate.text[:25].strip(), '%a, %d %b %Y %H:%M:%S')
-                        p_date = pytz.utc.localize(p_date).astimezone(kst)
-                        if (now - p_date).total_seconds() < self.time_limit:
-                            if not any(ex.replace(' ', '').lower() in i.title.text.lower().replace(' ', '') for ex in self.total_exclude):
-                                # [수정 부분] 구글 트렌드 전용 링크 추출 로직 (XML 에러 방지)
-                                if target == 'G_TRENDS':
-                                    news_item = i.find('ht:news_item_url')
-                                    link = news_item.text if news_item else i.link.text
-                                else:
-                                    link = i.link.text
-                                pool.append({'src': self.src_mapping[target], 'kw': i.title.text, 'desc': '', 'url': link})
-                    except: pass
-            
-            def generic_fetch(url, selector, label, base_url=""):
-                res = requests.get(url, headers=self.headers)
-                soup = BeautifulSoup(res.text, 'html.parser')
-                items = soup.select(selector)
-                out = []
-                for a in items:
-                    title = a.text.strip()
-                    if not any(ex.replace(' ', '').lower() in title.lower().replace(' ', '') for ex in self.total_exclude):
-                        link = a.get('href')
-                        if link and not link.startswith('http'): link = base_url + link
-                        out.append({'src': label, 'kw': title, 'desc': '', 'url': link})
-                return out
+            # 3. 구글 트렌드 (XML 링크 에러 방지)
+            rss = requests.get("https://trends.google.com/trending/rss?geo=KR", headers=self.headers)
+            items = BeautifulSoup(rss.text, 'xml').find_all('item')
+            for i in items:
+                title = i.title.text
+                news_url = i.find('ht:news_item_url')
+                link = news_url.text if news_url else i.link.text
+                if not any(ex.replace(' ', '').lower() in title.lower().replace(' ', '') for ex in self.total_exclude):
+                    pool.append({'src': self.src_mapping['G_TRENDS'], 'kw': title, 'desc': '', 'url': link})
 
+            # 4. 커뮤니티 4종 (디시, 펨코, 더쿠, 인스티즈) + 다음, 네이트
+            def generic_fetch(url, selector, label, base_url=""):
+                try:
+                    res = requests.get(url, headers=self.headers, timeout=10)
+                    soup = BeautifulSoup(res.text, 'html.parser')
+                    items = soup.select(selector)
+                    out = []
+                    for a in items:
+                        title = a.text.strip()
+                        if title and not any(ex.replace(' ', '').lower() in title.lower().replace(' ', '') for ex in self.total_exclude):
+                            link = a.get('href')
+                            if link and not link.startswith('http'): link = base_url + link
+                            out.append({'src': label, 'kw': title, 'desc': '', 'url': link})
+                    return out
+                except: return []
+
+            # 커뮤니티별 최적화된 베스트 게시판 경로
+            pool.extend(generic_fetch("https://www.fmkorea.com/best", ".title.hotdeal_var8 a", self.src_mapping['FMKOREA'], "https://www.fmkorea.com")[:25])
+            pool.extend(generic_fetch("https://www.dcinside.com/", ".box_best .list_best li a", self.src_mapping['DCINSIDE'])[:15])
+            pool.extend(generic_fetch("https://theqoo.net/hot", ".title a", self.src_mapping['THEQOO'], "https://theqoo.net")[:20])
+            pool.extend(generic_fetch("https://www.instiz.net/bbs/list.php?id=pt", ".st_title a", self.src_mapping['INSTIZ'], "https://www.instiz.net")[:20])
+            
+            # 포털 랭킹
             pool.extend(generic_fetch("https://news.daum.net/ranking/popular", ".link_txt", self.src_mapping['DAUM'])[:30])
             pool.extend(generic_fetch("https://news.nate.com/edit/issueup/", ".txt_tit", self.src_mapping['NATE'])[:15])
-            pool.extend(generic_fetch("https://www.fmkorea.com/best", ".title.hotdeal_var8 a", self.src_mapping['FMKOREA'], "https://www.fmkorea.com")[:20])
-            pool.extend(generic_fetch("https://www.dcinside.com/", ".box_best .list_best li a", self.src_mapping['DCINSIDE'])[:15])
 
         except: pass
+        
         seen, unique_pool = set(), []
         for item in pool:
             skel = re.sub(r'\s+', '', item['kw'])
@@ -117,12 +118,9 @@ class ShuMonitorEngine:
         return sorted(unique_pool, key=lambda x: 0 if '이슈' in x['src'] or '🔥' in x['src'] else 1)
 
 def run_monitor():
-    # 상단 가려짐 방지 강화 CSS
     st.markdown("""
         <style>
-            [data-testid="stHeader"], [data-testid="stDecoration"] { 
-                display: none !important; 
-            }
+            [data-testid="stHeader"], [data-testid="stDecoration"] { display: none !important; }
             .main .block-container {
                 margin-top: 150px !important;
                 padding-top: 0px !important;
@@ -149,16 +147,6 @@ def run_monitor():
     with c2: filter_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
     with c3:
         st.markdown(f"<div class='status-badge'>{len(st.session_state.data_pool)}건</div>", unsafe_allow_html=True)
-
-    _, b1, b2 = st.columns([8.2, 0.9, 0.9])
-    with b1:
-        if st.button("전체선택", use_container_width=True):
-            for item in st.session_state.data_pool: item['선택'] = True
-            st.session_state.editor_key += 1; st.rerun()
-    with b2:
-        if st.button("선택해제", use_container_width=True):
-            for item in st.session_state.data_pool: item['선택'] = False
-            st.session_state.editor_key += 1; st.rerun()
 
     st.markdown("---")
 
