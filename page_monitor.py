@@ -166,7 +166,7 @@ def run_monitor():
             column_config={
                 "수집시점": st.column_config.TextColumn("시간", width=80),
                 "src": st.column_config.TextColumn("출처", width=120),
-                "kw": st.column_config.TextColumn("이슈 헤드라인 전문", width=2500),
+                "kw": st.column_config.TextColumn("이슈 헤드라인 전문", width=800),
                 "url": st.column_config.LinkColumn(" ", display_text="🔗", width=40),
                 "선택": st.column_config.CheckboxColumn(" ", width=40)
             },
