@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime, re, requests, io, time, os
 from datetime import datetime, timedelta, timezone
-from difflib import SequenceMatcher # 중복 기사 판별용
+from bs4 import BeautifulSoup
 
 # [무결성 체크] 슈 님의 순정 클래스 - 기준 로직 100% 보존
 class MasterGuardian_Smart_Claude:
@@ -17,13 +17,11 @@ class MasterGuardian_Smart_Claude:
             self.naver_id = ""
             self.naver_secret = ""
 
-        # 슈 님의 원본 데이터 로드
         self.answer_data = self.load_txt_file('정답기사리스트.txt') 
         self.wrong_data = self.load_txt_file('오답기사리스트.txt')   
         self.risk_vocab = self.build_vocab(self.answer_data)
         self.noise_vocab = self.build_vocab(self.wrong_data)
 
-        # [보존] 제외 키워드 리스트 32개 그대로 유지
         self.exclude_list = [
             "변호사", "법무법인", "법률사무소", "상담문의", "무료상담", "홍보", "마케팅", "보도자료",
             "분양", "입주", "청약", "특가", "할인", "세일", "프로모션", "칼럼", "사설", "기고",
@@ -45,7 +43,6 @@ class MasterGuardian_Smart_Claude:
         return vocab
 
     def is_risk_context(self, title):
-        # [순정 보존] 슈 님의 판독 로직 100% 유지
         if any(ex in title for ex in self.exclude_list): return False
         current_words = set(re.findall(r'[가-힣0-9]{2,}', title))
         if len(current_words & self.noise_vocab) >= 3: return False
@@ -73,24 +70,55 @@ class MasterGuardian_Smart_Claude:
             return res.json().get('items', []) if res.status_code == 200 else []
         except: return []
 
+    # ✅ 수정 1: 구글 뉴스 파싱 → BeautifulSoup으로 교체 (링크 중복 방지)
     def search_google_news(self, keyword):
         url = f"https://news.google.com/rss/search?q={keyword}%20when:1d&hl=ko&gl=KR&ceid=KR:ko"
         try:
-            res = requests.get(url)
-            titles = re.findall(r'<title>(.*?)</title>', res.text)[1:]
-            links = re.findall(r'<link>(.*?)</link>', res.text)[1:]
-            return [{'title': t, 'link': l} for t, l in zip(titles, links)]
+            res = requests.get(url, timeout=5)
+            soup = BeautifulSoup(res.text, 'xml')
+            results = []
+            for item in soup.find_all('item'):
+                title = item.title.text if item.title else ''
+                # 구글 리다이렉트 대신 실제 기사 링크 추출
+                source_url = item.find('source')
+                link = item.link.text if item.link else ''
+                results.append({'title': title, 'link': link})
+            return results
         except: return []
 
+
 def run_claude_collector():
+    st.markdown("""
+        <style>
+            [data-testid="stHeader"],
+            [data-testid="stDecoration"],
+            [data-testid="stToolbar"],
+            header[data-testid="stHeader"] {
+                display: none !important;
+                height: 0 !important;
+            }
+            .main .block-container {
+                padding-top: 2.5rem !important;
+                margin-top: 0 !important;
+                max-width: 95% !important;
+            }
+            .status-badge {
+                background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
+                padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold;
+                height: 2.8rem; line-height: 1.8rem;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    if "is_collecting" not in st.session_state: st.session_state.is_collecting = False
+
     st.markdown("### 🛡️ 클로드 분석용 언론 수집")
     
-    # 데이터 세션 키
     DATA_KEY = "FINAL_FILTERED_STORAGE_V2"
     if DATA_KEY not in st.session_state: 
         st.session_state[DATA_KEY] = []
     
-    menu_c1, menu_c2, menu_c3, menu_c4 = st.columns([1, 1.5, 2, 0.5])
+    menu_c1, menu_c2, menu_c3, menu_c4, menu_c5 = st.columns([1.2, 2, 1.5, 0.5, 0.5])
     
     with menu_c1:
         if st.button("🚀 수집 시작", use_container_width=True):
@@ -99,7 +127,7 @@ def run_claude_collector():
             st.rerun()
 
     with menu_c2:
-        search_query = st.text_input("", placeholder="🔍 필터", label_visibility="collapsed")
+        search_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
 
     with menu_c3:
         df_btn = pd.DataFrame(st.session_state[DATA_KEY])
@@ -112,44 +140,54 @@ def run_claude_collector():
             st.button("📄 대기 중", disabled=True, use_container_width=True)
 
     with menu_c4:
-        st.markdown(f"<div style='border:1px solid #007BFF; color:#007BFF; font-weight:bold; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state[DATA_KEY])}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='status-badge'>{len(st.session_state[DATA_KEY])}건</div>", unsafe_allow_html=True)
+    with menu_c5:
+        if st.button("선택해제", use_container_width=True):
+            for item in st.session_state[DATA_KEY]: item["선택"] = False
+            st.rerun()
 
     if st.session_state.get('is_collecting', False):
-        with st.status("📡 전수 조사 중 (중복 박멸 모드)...", expanded=True) as status:
+        with st.spinner("📡 전수 조사 중..."):
             engine = MasterGuardian_Smart_Claude()
             
             if os.path.exists('언론키워드셋.txt'):
                 with open('언론키워드셋.txt', 'r', encoding='utf-8') as f:
                     keywords = list(set([l.strip() for l in f if l.strip()]))
                 
-                # 1단계: 모든 키워드의 기사를 링크 기준으로 1차 취합 (raw_pool)
+                # 1단계: 링크 기준 1차 중복 제거
                 raw_pool = {} 
                 for idx, kw in enumerate(keywords):
-                    status.update(label=f"🔎 1차 수집: '{kw}' ({idx+1}/{len(keywords)})")
+                    pass  # 진행상황은 spinner로 표시
                     all_news = engine.search_naver_news(kw) + engine.search_google_news(kw)
                     
                     for art in all_news:
                         link = art.get('link', art.get('originallink', ''))
                         if not link or link in raw_pool: continue
-                        
                         title = re.sub(r'<[^>]*>', '', art.get('title', '')).replace('&quot;', '"').strip()
-                        # 슈 님의 순정 로직 통과 여부 확인
                         if engine.is_risk_context(title):
                             raw_pool[link] = title
 
-                # 2단계: 수집 완료 후 모든 기사 대상 제목 유사도 전수 조사
-                status.update(label="🧪 2차 필터링: 유사 기사 통합 중...")
+                # ✅ 수정 2: 2단계 중복 제거 → 핵심 단어 2개 이상 겹치면 중복
+
                 final_filtered = []
                 current_time = datetime.now(engine.kst).strftime('%H:%M')
-                
+
+                def extract_key_words(text):
+                    # 2글자 이상 한글·숫자 단어 추출
+                    return set(re.findall(r'[가-힣0-9]{2,}', text))
+
+                seen_titles = []  # (key_words, title) 저장
+
                 for link, title in raw_pool.items():
+                    key_words = extract_key_words(title)
                     is_dup = False
-                    for seen in final_filtered:
-                        # 제목 유사도 80% 이상이면 동일 기사로 간주하여 제외
-                        if SequenceMatcher(None, title, seen['기사제목']).ratio() > 0.8:
+                    for prev_key, _ in seen_titles:
+                        # 핵심 단어 2개 이상 겹치면 중복
+                        if len(key_words & prev_key) >= 2:
                             is_dup = True
                             break
                     if not is_dup:
+                        seen_titles.append((key_words, title))
                         final_filtered.append({
                             '수집시간': current_time, 
                             '기사제목': title, 
@@ -157,10 +195,9 @@ def run_claude_collector():
                             '선택': True
                         })
                 
-                # 결과값 덮어쓰기
                 st.session_state[DATA_KEY] = final_filtered
                 
-            status.update(label="✅ 수집 및 중복 제거 완료", state="complete")
+
         st.session_state.is_collecting = False
         st.rerun()
 
