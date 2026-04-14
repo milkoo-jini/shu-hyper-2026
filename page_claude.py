@@ -3,7 +3,7 @@ import pandas as pd
 import datetime, re, requests, io, time, os
 from datetime import datetime, timedelta
 
-# [무결성 체크] 슈 님의 순정 클래스 - 판독 로직 및 설정 보존
+# [검증] 슈 님의 순정 클래스 - 판독 기준 및 단어 리스트 100% 보존
 class MasterGuardian_Smart_Claude:
     def __init__(self):
         self.now = datetime.now()
@@ -14,13 +14,13 @@ class MasterGuardian_Smart_Claude:
             self.naver_id = ""
             self.naver_secret = ""
 
-        # [보존] 메모장 데이터 로드 로직
+        # [보존] 메모장 학습 데이터 로직
         self.answer_data = self.load_txt_file('정답기사리스트.txt') 
         self.wrong_data = self.load_txt_file('오답기사리스트.txt')   
         self.risk_vocab = self.build_vocab(self.answer_data)
         self.noise_vocab = self.build_vocab(self.wrong_data)
 
-        # [보존] 제외 키워드 리스트
+        # [보존] 제외 키워드 리스트 (32개 단어 그대로)
         self.exclude_list = [
             "변호사", "법무법인", "법률사무소", "상담문의", "무료상담", "홍보", "마케팅", "보도자료",
             "분양", "입주", "청약", "특가", "할인", "세일", "프로모션", "칼럼", "사설", "기고",
@@ -42,7 +42,7 @@ class MasterGuardian_Smart_Claude:
         return vocab
 
     def is_risk_context(self, title):
-        # [순정 로직] 판독 순서 및 기준 100% 유지
+        # [보존] 슈 님의 순정 판독 로직 (제외단어 -> 오답단어 3개 -> 5대기준 -> 정답단어 2개)
         if any(ex in title for ex in self.exclude_list): return False
         current_words = set(re.findall(r'[가-힣0-9]{2,}', title))
         if len(current_words & self.noise_vocab) >= 3: return False
@@ -58,7 +58,7 @@ class MasterGuardian_Smart_Claude:
             if any(w in title for w in words): return True
         return len(current_words & self.risk_vocab) >= 2
 
-    # [보존] 메모장 다운로드용 - 가이드라인 제거 버전
+    # [수정 반영] 다운로드용 메모장 - 가이드라인 제거 (데이터만 추출)
     def make_claude_download_txt(self, to_analyze):
         return f"""---
 ### **[검토 대상 리스트]**
@@ -91,13 +91,12 @@ def run_claude_collector():
     if 'claude_pool' not in st.session_state: 
         st.session_state.claude_pool = []
     
-    # [UI] 상단 메뉴
     menu_c1, menu_c2, menu_c3, menu_c4 = st.columns([1, 1.5, 2, 0.5])
     
     with menu_c1:
         if st.button("🚀 수집 시작", use_container_width=True):
-            # [보완 1] 버튼 클릭 시 기존 결과 백지화 (누적 방지)
-            st.session_state.claude_pool = [] 
+            # [보완] 시작 시 세션 비우기 (누적 방지)
+            st.session_state.claude_pool = []
             st.session_state.is_collecting = True
             st.rerun()
 
@@ -117,7 +116,7 @@ def run_claude_collector():
     with menu_c4:
         st.markdown(f"<div style='border:1px solid #007BFF; color:#007BFF; font-weight:bold; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state.claude_pool)}</div>", unsafe_allow_html=True)
 
-    # [수집 로직] 중복 제거 0% 보완
+    # [수집 로직] 중복 제거 및 누락 방지 강화
     if st.session_state.get('is_collecting', False):
         with st.status("📡 슈 님의 엔진 가동 중...", expanded=True) as status:
             engine = MasterGuardian_Smart_Claude()
@@ -126,25 +125,25 @@ def run_claude_collector():
                     keywords = [l.strip() for l in f if l.strip()]
                 
                 temp_results = []
-                # [보완 2] url_bucket을 루프 밖으로 이동하여 전체 수집 기간 동안 중복 차단
-                url_bucket = set() 
+                unique_links = set() # [보완] 중복 기사 중 1개는 남기고 나머지만 버리는 자물쇠
                 total_kw = len(keywords)
                 
                 for idx, kw in enumerate(keywords):
                     status.update(label=f"🔎 '{kw}' 판독 중... [{idx+1}/{total_kw}]")
                     
-                    # 네이버 + 구글 뉴스 통합 수집
+                    # 네이버 + 구글 뉴스 통합
                     all_news = engine.search_naver_news(kw) + engine.search_google_news(kw)
                     
                     for art in all_news:
-                        # [보완 3] 링크 추출 방식 통일 및 중복 체크
                         link = art.get('link', art.get('originallink', ''))
-                        if not link or link in url_bucket:
+                        
+                        # [핵심] 링크가 없거나, 이미 수집된 링크면 건너뜀 (이미 1개는 담겼다는 뜻)
+                        if not link or link in unique_links:
                             continue
                         
                         title = re.sub(r'<[^>]*>', '', art.get('title', '')).replace('&quot;', '"').strip()
                         
-                        # 슈 님의 순정 리스크 판독 로직
+                        # [보존] 슈 님의 순정 리스크 판독 로직 태우기
                         if not engine.is_risk_context(title):
                             continue
                         
@@ -152,16 +151,15 @@ def run_claude_collector():
                             '수집시간': datetime.now().strftime('%m/%d %H:%M'),
                             '수집키워드': kw, '기사제목': title, '링크': link, '선택': True
                         })
-                        # [보완 4] 수집된 링크를 바구니에 담아 다음 키워드에서 중복 시 즉시 제외
-                        url_bucket.add(link) 
+                        unique_links.add(link) # 새로 발견한 링크는 자물쇠에 등록 (이후 중복은 차단)
                 
-                # 모든 수집이 끝난 후 한 번에 세션에 저장
+                # 수집 종료 후 세션에 최종 교체
                 st.session_state.claude_pool = temp_results
             status.update(label="✅ 수집 완료", state="complete")
         st.session_state.is_collecting = False
         st.rerun()
 
-    # [UI] 테이블 설정 (use_container_width=True)
+    # [UI] 테이블 설정
     if st.session_state.claude_pool:
         df = pd.DataFrame(st.session_state.claude_pool)
         if search_query:
@@ -176,5 +174,5 @@ def run_claude_collector():
                 "링크": st.column_config.LinkColumn(" ", display_text="🔗", width=40),
                 "선택": st.column_config.CheckboxColumn(" ", width=40),
             },
-            hide_index=True, use_container_width=True, height=700, key="fixed_final_v3"
+            hide_index=True, use_container_width=True, height=700, key="pure_final_stable"
         )
