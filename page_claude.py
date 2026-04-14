@@ -1,5 +1,5 @@
 import streamlit as st
-import pd
+import pandas as pd
 import datetime, re, requests, io, time
 import urllib.parse
 from bs4 import BeautifulSoup
