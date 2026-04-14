@@ -8,7 +8,7 @@ import os
 import email.utils
 
 # ==========================================
-# 1. 슈 님 원본 엔진 (분석 철학 및 기준 100% 보존)
+# 1. 슈 님 원본 엔진 (분석 철학 및 5대 기준 100% 보존)
 # ==========================================
 class MasterGuardian_Smart_Claude:
     def __init__(self):
@@ -23,7 +23,7 @@ class MasterGuardian_Smart_Claude:
         self.wrong_data = self.load_txt_file('오답기사리스트.txt')
         self.risk_vocab = self.build_vocab(self.answer_data)
         self.noise_vocab = self.build_vocab(self.wrong_data)
-        self.time_limit = 86400  # 24시간 제한
+        self.time_limit = 86400
 
     def load_txt_file(self, filename):
         if os.path.exists(filename):
@@ -69,10 +69,10 @@ class MasterGuardian_Smart_Claude:
         except: return []
 
 # ==========================================
-# 2. UI 및 수집 로직 (문구 수정 반영)
+# 2. UI 및 수집 로직 (요청 문구 및 이모지 반영)
 # ==========================================
 def run_claude_collector():
-    # [문구 및 이모지 수정]
+    # [수정] 요청하신 타이틀과 캡션으로 변경 + 컬러 이모지 전용 Span
     st.markdown("### <span class='color-emoji'>🤖</span> AI 분석용 로우 데이터 가공", unsafe_allow_html=True)
     st.caption("5대 기준 정밀 필터링: 카테고리를 넘어 리스크의 본질을 포착합니다.")
 
@@ -80,7 +80,7 @@ def run_claude_collector():
     if 'claude_key' not in st.session_state: st.session_state.claude_key = 0
     if 'is_collecting' not in st.session_state: st.session_state.is_collecting = False
 
-    # 상단 컨트롤 바
+    # 컨트롤 바
     c1, c2, c3, c4, c5 = st.columns([1.5, 2, 0.5, 0.5, 0.5])
     with c1:
         if st.button("🚀 로우 데이터 수집 시작", use_container_width=True):
@@ -114,7 +114,7 @@ def run_claude_collector():
                     for kw in keywords:
                         # 사이드바 stop_flag 체크
                         if st.session_state.get('stop_flag', False):
-                            st.warning("분석이 중단되었습니다.")
+                            st.warning("사용자에 의해 분석이 중단되었습니다.")
                             break
                         
                         items = engine.search_naver_news(kw)
@@ -131,7 +131,7 @@ def run_claude_collector():
                 spinner_placeholder.empty()
                 st.rerun()
 
-    st.markdown("---")
+    st.divider()
     
     if st.session_state.claude_pool:
         df = pd.DataFrame(st.session_state.claude_pool)
@@ -167,16 +167,16 @@ def run_claude_collector():
                 st.download_button("📊 엑셀 백업", out.getvalue(), "Risk_Backup.xlsx", use_container_width=True)
 
 # ==========================================
-# 3. 메인 (사이드바 제어 및 CSS)
+# 3. 메인 (사이드바 중단 버튼 및 폰트 설정)
 # ==========================================
 def main():
     st.set_page_config(layout="wide", page_title="Shu System")
     
-    # 컬러 이모지 전용 폰트 및 스타일
+    # [이모지 해결] 윈도우에서도 컬러로 나오게 구글 폰트 적용
     st.markdown("""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
-            .color-emoji { font-family: 'Noto Color Emoji', sans-serif !important; }
+            .color-emoji { font-family: 'Noto Color Emoji', sans-serif !important; font-size: 1.5rem; }
             [data-testid="stHeader"], [data-testid="stToolbar"] {display: none !important;}
             .main .block-container {padding-top: 2rem !important; max-width: 95% !important;}
             .status-badge {
@@ -194,7 +194,7 @@ def main():
         st.markdown("---")
         menu = st.radio("메뉴 선택", ["🔍 실시간 모니터링", "🤖 클로드 분석용 수집"])
         
-        # [중단 버튼]
+        # [수정] 사이드바 분석 중단 버튼 (가장 확실한 위치)
         st.divider()
         if st.button("⛔ 분석 중단", use_container_width=True):
             st.session_state.stop_flag = True
