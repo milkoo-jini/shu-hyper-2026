@@ -110,7 +110,7 @@ def render_table(df, editor_key):
 
 def run_claude_collector():
     st.markdown("### 🤖 클로드 분석용 언론 수집")
-    st.caption("분석 철학에 기반하여 24시간 이내 리스크 데이터를 포괄적으로 수집합니다.")
+    st.caption("AI 분석용 로우 데이터 가공")
 
     if 'claude_pool' not in st.session_state: st.session_state.claude_pool = []
     if 'claude_key' not in st.session_state: st.session_state.claude_key = 0
