@@ -1,12 +1,15 @@
 import streamlit as st
 import pandas as pd
 import datetime, re, requests, io, time, os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-# [검증] 슈 님의 순정 클래스 - 판독 기준 및 단어 리스트 100% 보존
+# [무결성 체크] 슈 님의 순정 클래스 - 판독 기준 및 단어 리스트 100% 보존
 class MasterGuardian_Smart_Claude:
     def __init__(self):
-        self.now = datetime.now()
+        # 한국 시간대(KST) 설정을 위해 9시간 더하기 적용
+        self.kst = timezone(timedelta(hours=9))
+        self.now = datetime.now(self.kst)
+        
         try:
             self.naver_id = st.secrets["NAVER_ID"]
             self.naver_secret = st.secrets["NAVER_SECRET"]
@@ -58,7 +61,7 @@ class MasterGuardian_Smart_Claude:
             if any(w in title for w in words): return True
         return len(current_words & self.risk_vocab) >= 2
 
-    # [수정 반영] 다운로드용 메모장 - 가이드라인 제거 (데이터만 추출)
+    # [수정 반영] 다운로드용 메모장 - 가이드라인 제거
     def make_claude_download_txt(self, to_analyze):
         return f"""---
 ### **[검토 대상 리스트]**
@@ -88,15 +91,16 @@ class MasterGuardian_Smart_Claude:
 def run_claude_collector():
     st.markdown("### 🛡️ 클로드 분석용 언론 수집")
     
-    if 'claude_pool' not in st.session_state: 
-        st.session_state.claude_pool = []
+    # [보완] 기존 찌꺼기를 날리기 위해 세션 키 변경 (v4)
+    if 'claude_pool_v4' not in st.session_state: 
+        st.session_state.claude_pool_v4 = []
     
     menu_c1, menu_c2, menu_c3, menu_c4 = st.columns([1, 1.5, 2, 0.5])
     
     with menu_c1:
         if st.button("🚀 수집 시작", use_container_width=True):
-            # [보완] 시작 시 세션 비우기 (누적 방지)
-            st.session_state.claude_pool = []
+            # 수집 시작 시 세션을 즉시 비워 누적 방지
+            st.session_state.claude_pool_v4 = []
             st.session_state.is_collecting = True
             st.rerun()
 
@@ -104,7 +108,7 @@ def run_claude_collector():
         search_query = st.text_input("", placeholder="🔍 기사제목 필터", label_visibility="collapsed")
 
     with menu_c3:
-        df_btn = pd.DataFrame(st.session_state.claude_pool)
+        df_btn = pd.DataFrame(st.session_state.claude_pool_v4)
         if not df_btn.empty and any(df_btn['선택']):
             sel_titles = df_btn[df_btn['선택'] == True]['기사제목'].tolist()
             engine_temp = MasterGuardian_Smart_Claude()
@@ -114,54 +118,54 @@ def run_claude_collector():
             st.button("📄 다운로드 대기 중", disabled=True, use_container_width=True)
 
     with menu_c4:
-        st.markdown(f"<div style='border:1px solid #007BFF; color:#007BFF; font-weight:bold; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state.claude_pool)}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='border:1px solid #007BFF; color:#007BFF; font-weight:bold; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state.claude_pool_v4)}</div>", unsafe_allow_html=True)
 
-    # [수집 로직] 중복 제거 및 누락 방지 강화
     if st.session_state.get('is_collecting', False):
         with st.status("📡 슈 님의 엔진 가동 중...", expanded=True) as status:
             engine = MasterGuardian_Smart_Claude()
+            kst = timezone(timedelta(hours=9)) # 한국 시간대
+            
             if os.path.exists('언론키워드셋.txt'):
                 with open('언론키워드셋.txt', 'r', encoding='utf-8') as f:
                     keywords = [l.strip() for l in f if l.strip()]
                 
-                temp_results = []
-                unique_links = set() # [보완] 중복 기사 중 1개는 남기고 나머지만 버리는 자물쇠
+                temp_results = [] # 임시 바구니 (누적 방지용)
+                unique_links = set() # 링크 중복 자물쇠 (원본 1개 보존)
                 total_kw = len(keywords)
                 
                 for idx, kw in enumerate(keywords):
                     status.update(label=f"🔎 '{kw}' 판독 중... [{idx+1}/{total_kw}]")
-                    
-                    # 네이버 + 구글 뉴스 통합
                     all_news = engine.search_naver_news(kw) + engine.search_google_news(kw)
                     
                     for art in all_news:
                         link = art.get('link', art.get('originallink', ''))
-                        
-                        # [핵심] 링크가 없거나, 이미 수집된 링크면 건너뜀 (이미 1개는 담겼다는 뜻)
+                        # 링크 중복 시 건너뜀 (이미 1개는 담겼으므로 안전함)
                         if not link or link in unique_links:
                             continue
                         
                         title = re.sub(r'<[^>]*>', '', art.get('title', '')).replace('&quot;', '"').strip()
                         
-                        # [보존] 슈 님의 순정 리스크 판독 로직 태우기
+                        # [보존] 슈 님의 순정 리스크 판독 로직
                         if not engine.is_risk_context(title):
                             continue
                         
                         temp_results.append({
-                            '수집시간': datetime.now().strftime('%m/%d %H:%M'),
+                            # [시간 교정] 한국 표준시 적용
+                            '수집시간': datetime.now(kst).strftime('%m/%d %H:%M'),
                             '수집키워드': kw, '기사제목': title, '링크': link, '선택': True
                         })
-                        unique_links.add(link) # 새로 발견한 링크는 자물쇠에 등록 (이후 중복은 차단)
+                        unique_links.add(link) 
                 
-                # 수집 종료 후 세션에 최종 교체
-                st.session_state.claude_pool = temp_results
+                # 모든 수집 종료 후 세션 통째로 교체
+                st.session_state.claude_pool_v4 = temp_results
+                
             status.update(label="✅ 수집 완료", state="complete")
         st.session_state.is_collecting = False
         st.rerun()
 
-    # [UI] 테이블 설정
-    if st.session_state.claude_pool:
-        df = pd.DataFrame(st.session_state.claude_pool)
+    # 결과 테이블
+    if st.session_state.claude_pool_v4:
+        df = pd.DataFrame(st.session_state.claude_pool_v4)
         if search_query:
             df = df[df['기사제목'].str.contains(search_query, case=False, na=False)]
         
@@ -174,5 +178,5 @@ def run_claude_collector():
                 "링크": st.column_config.LinkColumn(" ", display_text="🔗", width=40),
                 "선택": st.column_config.CheckboxColumn(" ", width=40),
             },
-            hide_index=True, use_container_width=True, height=700, key="pure_final_stable"
+            hide_index=True, use_container_width=True, height=700, key="v4_stable_final"
         )
