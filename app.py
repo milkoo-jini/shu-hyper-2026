@@ -12,14 +12,14 @@ if 'is_collecting' not in st.session_state: st.session_state.is_collecting = Fal
 with st.sidebar:
     st.title("🚀 업무 제어 센터")
     menu = st.radio("메뉴 선택", [
-        "🛡️ 클로드 분석용 언론 수집",
-        "🔍 실시간 이슈 모니터링", 
-        "🛠️ 리스크 키워드 확장"
+        "클로드 분석용 언론 수집",
+        "실시간 이슈 모니터링", 
+        "리스크 키워드 확장"
     ])
     st.markdown("---")
     
     # [수정] 중단 버튼이 실시간으로 신호를 보내도록 개선
-    if menu == "🛡️ 클로드 분석용 언론 수집":
+    if menu == "클로드 분석용 언론 수집":
         if st.button("⛔ 분석 중단", use_container_width=True, type="primary"):
             st.session_state.stop_flag = True
             st.session_state.is_collecting = False
@@ -28,9 +28,9 @@ with st.sidebar:
 
     st.caption("v2.1 Hybrid Engine (AI + Local)")
 
-if menu == "🔍 실시간 이슈 모니터링":
+if menu == "실시간 이슈 모니터링":
     run_monitor()
-elif menu == "🛠️ 리스크 키워드 확장":
+elif menu == "리스크 키워드 확장":
     run_keyword()
 else:
     run_claude_collector()
