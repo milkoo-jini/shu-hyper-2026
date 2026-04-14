@@ -372,8 +372,8 @@ def run_monitor():
                 max-width: 95% !important;
             }
             .status-badge {
-                background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
-                padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold;
+                border: 1px solid #888; border-radius: 6px;
+                padding: 0.5rem; text-align: center; font-weight: bold;
                 height: 2.8rem; line-height: 1.8rem;
             }
         </style>
@@ -391,11 +391,23 @@ def run_monitor():
     else:
         st.markdown("### 🔍 실시간 이슈 모니터링")
 
-    c1, c2, c3 = st.columns([1, 1, 0.8])
+    c1, c2, c3, c4, c5 = st.columns([1.5, 2, 0.5, 0.5, 0.5])
     with c1:
         if st.button("🚀 전체 채널 스캔", use_container_width=True):
             st.session_state.is_scanning = True
             st.rerun()
+    with c2:
+        filter_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
+    with c3:
+        st.markdown(f"<div class='status-badge'>{len(st.session_state.data_pool)}건</div>", unsafe_allow_html=True)
+    with c4:
+        if st.button("전체선택", use_container_width=True):
+            for item in st.session_state.data_pool: item['선택'] = True
+            st.session_state.editor_key += 1; st.rerun()
+    with c5:
+        if st.button("선택해제", use_container_width=True):
+            for item in st.session_state.data_pool: item['선택'] = False
+            st.session_state.editor_key += 1; st.rerun()
 
     # 스캔 실행 (rerun 후 처리)
     if st.session_state.is_scanning:
@@ -404,20 +416,6 @@ def run_monitor():
             st.session_state.editor_key += 1
             st.session_state.is_scanning = False
             st.rerun()
-    with c2:
-        filter_query = st.text_input("", placeholder="🔍 결과 내 필터링", label_visibility="collapsed")
-    with c3:
-        st.markdown(f"<div class='status-badge'>{len(st.session_state.data_pool)}건</div>", unsafe_allow_html=True)
-
-    _, b1, b2 = st.columns([8.2, 0.9, 0.9])
-    with b1:
-        if st.button("전체선택", use_container_width=True):
-            for item in st.session_state.data_pool: item['선택'] = True
-            st.session_state.editor_key += 1; st.rerun()
-    with b2:
-        if st.button("선택해제", use_container_width=True):
-            for item in st.session_state.data_pool: item['선택'] = False
-            st.session_state.editor_key += 1; st.rerun()
 
     st.markdown("---")
 
@@ -432,12 +430,12 @@ def run_monitor():
             column_config={
                 "수집시점": st.column_config.TextColumn("시간",               width=150),
                 "src":      st.column_config.TextColumn("출처",               width=200),
-                "kw":       st.column_config.TextColumn("이슈 헤드라인 전문", width=800),
-                "url":      st.column_config.LinkColumn(" ", display_text="🔗", width=80),
-                "선택":     st.column_config.CheckboxColumn(" ",              width=80),
+                "kw":       st.column_config.TextColumn("이슈 헤드라인 전문"),
+                "url":      st.column_config.LinkColumn(" ", display_text="🔗", width=60),
+                "선택":     st.column_config.CheckboxColumn(" ",              width=60),
             },
             column_order=("수집시점", "src", "kw", "url", "선택"),
-            hide_index=True, use_container_width=False, height=600,
+            hide_index=True, use_container_width=True, height=900,
             key=f"editor_{st.session_state.editor_key}"
         )
 
