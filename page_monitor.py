@@ -300,7 +300,8 @@ class ShuMonitorEngine:
                 try:
                     title = BeautifulSoup(i['title'], 'html.parser').get_text()
                     desc  = BeautifulSoup(i.get('description', ''), 'html.parser').get_text()
-                    pool.append({'src': '⏱️ 네이버 뉴스', 'kw': title, 'desc': desc, 'url': i.get('link', '')})
+                    if not self._is_excluded(title, desc):
+                        pool.append({'src': '⏱️ 네이버 뉴스', 'kw': title, 'desc': desc, 'url': i.get('link', '')})
                 except:
                     pass
         except:
@@ -310,7 +311,9 @@ class ShuMonitorEngine:
         try:
             g_res = requests.get(f"https://news.google.com/rss/search?q={eq}&hl=ko&gl=KR&ceid=KR:ko", headers=self.headers, timeout=5)
             for i in BeautifulSoup(g_res.text, 'xml').find_all('item')[:20]:
-                pool.append({'src': '📰 구글 뉴스', 'kw': i.title.text, 'desc': '', 'url': i.link.text})
+                title = i.title.text
+                if not self._is_excluded(title):
+                    pool.append({'src': '📰 구글 뉴스', 'kw': title, 'desc': '', 'url': i.link.text})
         except:
             pass
 
@@ -319,7 +322,7 @@ class ShuMonitorEngine:
             rss = requests.get("https://trends.google.com/trending/rss?geo=KR", headers=self.headers, timeout=5)
             for i in BeautifulSoup(rss.text, 'xml').find_all('item'):
                 title = i.title.text
-                if keyword.lower() in title.lower():
+                if keyword.lower() in title.lower() and not self._is_excluded(title):
                     news_url = i.find('ht:news_item_url')
                     link = news_url.text if news_url else i.link.text
                     pool.append({'src': '🌐 구글 트렌드', 'kw': title, 'desc': '', 'url': link})
