@@ -7,9 +7,7 @@ import pytz
 import os
 import email.utils
 
-# ==========================================
-# 1. 슈 님 원본 엔진 (분석 철학 및 5대 기준 100% 보존)
-# ==========================================
+# [원본 엔진 - 5대 기준 및 철학 절대 보존]
 class MasterGuardian_Smart_Claude:
     def __init__(self):
         try:
@@ -49,6 +47,7 @@ class MasterGuardian_Smart_Claude:
         current_words = set(re.findall(r'[가-힣0-9]{2,}', title))
         if len(current_words & self.noise_vocab) >= 3: return False
         
+        # [수정 금지] 5대 리스크 기준
         risk_standards = [
             '사칭', '허위', '딥페이크', '기만', '속여', '조작', '가짜', '도용',
             '유출', '협박', '스토킹', '먹튀', '폐업', '피해', '탈취', '보복',
@@ -68,13 +67,18 @@ class MasterGuardian_Smart_Claude:
             return res.json().get('items', [])
         except: return []
 
-# ==========================================
-# 2. UI 및 수집 로직 (요청 문구 및 이모지 반영)
-# ==========================================
 def run_claude_collector():
-    # [수정] 요청하신 타이틀과 캡션으로 변경 + 컬러 이모지 전용 Span
-    st.markdown("### <span class='color-emoji'>🤖</span> AI 분석용 로우 데이터 가공", unsafe_allow_html=True)
-    st.caption("5대 기준 정밀 필터링: 카테고리를 넘어 리스크의 본질을 포착합니다.")
+    # 컬러 이모지 및 제목
+    st.markdown("""
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
+            .emoji { font-family: 'Noto Color Emoji', sans-serif !important; }
+        </style>
+        <h3><span class="emoji">🤖</span> 클로드 분석용 언론 수집</h3>
+    """, unsafe_allow_html=True)
+    
+    # [수정] 캡션 문구 변경
+    st.caption("AI 분석용 로우 데이터 가공")
 
     if 'claude_pool' not in st.session_state: st.session_state.claude_pool = []
     if 'claude_key' not in st.session_state: st.session_state.claude_key = 0
@@ -90,7 +94,7 @@ def run_claude_collector():
     with c2:
         search_query = st.text_input("", placeholder="🔍 결과 내 키워드 검색", label_visibility="collapsed")
     with c3:
-        st.markdown(f"<div class='status-badge'>{len(st.session_state.claude_pool)}건</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='border:1px solid #ddd; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state.claude_pool)}건</div>", unsafe_allow_html=True)
     with c4:
         if st.button("전체선택", use_container_width=True):
             for i in st.session_state.claude_pool: i['선택'] = True
@@ -104,7 +108,8 @@ def run_claude_collector():
 
     if st.session_state.is_collecting:
         with spinner_placeholder.container():
-            with st.spinner("⏳ 분석 철학에 기반하여 리스크 본질 탐지 중..."):
+            # [수정] 담백한 업무용 문구로 변경
+            with st.spinner("⏳ 데이터 수집 및 리스크 필터링 중..."):
                 engine = MasterGuardian_Smart_Claude()
                 if os.path.exists('언론키워드셋.txt'):
                     with open('언론키워드셋.txt', 'r', encoding='utf-8') as f:
@@ -112,9 +117,8 @@ def run_claude_collector():
                     
                     results = []
                     for kw in keywords:
-                        # 사이드바 stop_flag 체크
                         if st.session_state.get('stop_flag', False):
-                            st.warning("사용자에 의해 분석이 중단되었습니다.")
+                            st.warning("분석이 중단되었습니다.")
                             break
                         
                         items = engine.search_naver_news(kw)
@@ -165,46 +169,3 @@ def run_claude_collector():
                 out = io.BytesIO()
                 sel.drop(columns=['선택']).to_excel(out, index=False, engine='openpyxl')
                 st.download_button("📊 엑셀 백업", out.getvalue(), "Risk_Backup.xlsx", use_container_width=True)
-
-# ==========================================
-# 3. 메인 (사이드바 중단 버튼 및 폰트 설정)
-# ==========================================
-def main():
-    st.set_page_config(layout="wide", page_title="Shu System")
-    
-    # [이모지 해결] 윈도우에서도 컬러로 나오게 구글 폰트 적용
-    st.markdown("""
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
-            .color-emoji { font-family: 'Noto Color Emoji', sans-serif !important; font-size: 1.5rem; }
-            [data-testid="stHeader"], [data-testid="stToolbar"] {display: none !important;}
-            .main .block-container {padding-top: 2rem !important; max-width: 95% !important;}
-            .status-badge {
-                background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
-                padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold;
-                height: 2.8rem; line-height: 1.8rem;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-
-    if 'stop_flag' not in st.session_state: st.session_state.stop_flag = False
-
-    with st.sidebar:
-        st.title("🛡️ SHU SYSTEM")
-        st.markdown("---")
-        menu = st.radio("메뉴 선택", ["🔍 실시간 모니터링", "🤖 클로드 분석용 수집"])
-        
-        # [수정] 사이드바 분석 중단 버튼 (가장 확실한 위치)
-        st.divider()
-        if st.button("⛔ 분석 중단", use_container_width=True):
-            st.session_state.stop_flag = True
-            st.session_state.is_collecting = False
-            st.rerun()
-
-    if menu == "🔍 실시간 모니터링":
-        st.info("실시간 모니터링 페이지")
-    elif menu == "🤖 클로드 분석용 수집":
-        run_claude_collector()
-
-if __name__ == "__main__":
-    main()
