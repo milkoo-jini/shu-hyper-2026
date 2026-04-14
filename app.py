@@ -12,9 +12,9 @@ if 'is_collecting' not in st.session_state: st.session_state.is_collecting = Fal
 with st.sidebar:
     st.title("🚀 업무 제어 센터")
     menu = st.radio("메뉴 선택", [
+        "🛡️ 클로드 분석용 언론 수집",
         "🔍 실시간 이슈 모니터링", 
-        "🛠️ 리스크 키워드 확장",
-        "🛡️ 클로드 분석용 언론 수집" # [수정] 🛡️로 통일
+        "🛠️ 리스크 키워드 확장"
     ])
     st.markdown("---")
     
