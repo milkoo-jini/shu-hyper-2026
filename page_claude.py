@@ -3,18 +3,19 @@ import pandas as pd
 import datetime, re, requests, io, time, os
 from datetime import datetime, timedelta
 
-# [체크] 슈 님의 순정 클래스 - 단 한 글자도 임의 수정 없음
+# [체크] 슈 님의 순정 클래스 - 동작 방식 및 프롬프트 무결성 유지
 class MasterGuardian_Smart_Claude:
     def __init__(self):
         self.now = datetime.now()
         self.time_limit = self.now - timedelta(hours=24)
         
+        # 보안을 위해 Secrets에서 호출 (슈 님이 재발급한 키 사용)
         try:
             self.naver_id = st.secrets["NAVER_ID"]
             self.naver_secret = st.secrets["NAVER_SECRET"]
         except:
-            self.naver_id = "g6EGE1xFHkT99HQ2CRtd"
-            self.naver_secret = "Q9DVSRZVL2"
+            self.naver_id = ""
+            self.naver_secret = ""
 
         # [보존] 메모장 데이터 로드 로직
         self.answer_data = self.load_txt_file('정답기사리스트.txt') 
@@ -44,7 +45,7 @@ class MasterGuardian_Smart_Claude:
         return vocab
 
     def is_risk_context(self, title):
-        # [무결성 체크] 슈 님 원본 판독 로직 100% 동일
+        # [순정 로직] 제외단어 -> 오답메모장 -> 5대기준 -> 2점제 순서 유지
         if any(ex in title for ex in self.exclude_list): return False
         current_words = set(re.findall(r'[가-힣0-9]{2,}', title))
         if len(current_words & self.noise_vocab) >= 3: return False
@@ -67,27 +68,30 @@ class MasterGuardian_Smart_Claude:
         wrong_examples = "\n".join([f"- {t}" for t in self.wrong_data[-30:]])
         return f"""당신은 국가급 위기 관리 및 플랫폼 생태계 감시 전문가입니다.\n\n### **📖 [공부해야 할 정답 사례]**\n{answer_examples}\n\n### **🕵️ [리스크 판별 기준]**\n1. 기만 및 사칭\n2. 이용자 피해 및 보복\n3. 불법 유통 및 위반\n4. 사회적 신뢰 훼손\n5. 신종 수법 및 사각지대\n\n### **⚠️ [분석 철학]**\n- 포괄적 해석 적용\n- 단순 동정/홍보 오답만 제외\n\n### **🚫 [오답 사례]**\n{wrong_examples}\n\n---\n### **[검토 대상 리스트]**\n{to_analyze}\n\n---\n[제목 / 판별결과(포착/패스) / 사유] 형식으로 정리하세요."""
 
-    # (이하 네이버/구글 API 수집 함수들 슈 님 원본과 동일)
     def search_naver_news(self, keyword):
         url = "https://openapi.naver.com/v1/search/news.json"
         headers = {"X-Naver-Client-Id": self.naver_id, "X-Naver-Client-Secret": self.naver_secret}
         params = {"query": keyword, "display": 50, "sort": "date"}
-        res = requests.get(url, headers=headers, params=params)
-        return res.json().get('items', []) if res.status_code == 200 else []
+        try:
+            res = requests.get(url, headers=headers, params=params)
+            return res.json().get('items', []) if res.status_code == 200 else []
+        except: return []
 
     def search_google_news(self, keyword):
         url = f"https://news.google.com/rss/search?q={keyword}%20when:1d&hl=ko&gl=KR&ceid=KR:ko"
-        res = requests.get(url)
-        titles = re.findall(r'<title>(.*?)</title>', res.text)[1:]
-        links = re.findall(r'<link>(.*?)</link>', res.text)[1:]
-        return [{'title': t, 'link': l} for t, l in zip(titles, links)]
+        try:
+            res = requests.get(url)
+            titles = re.findall(r'<title>(.*?)</title>', res.text)[1:]
+            links = re.findall(r'<link>(.*?)</link>', res.text)[1:]
+            return [{'title': t, 'link': l} for t, l in zip(titles, links)]
+        except: return []
 
 def run_claude_collector():
     st.markdown("### 🛡️ 클로드 분석용 언론 수집")
     
     if 'claude_pool' not in st.session_state: st.session_state.claude_pool = []
     
-    # [UI] 메뉴 구성 - 필터 옆 다운로드 버튼 고정
+    # [UI] 메뉴 구성 (필터 옆 다운로드 버튼 고정)
     menu_c1, menu_c2, menu_c3, menu_c4 = st.columns([1, 1.5, 2, 0.5])
     
     with menu_c1:
@@ -99,7 +103,6 @@ def run_claude_collector():
         search_query = st.text_input("", placeholder="🔍 기사제목 필터", label_visibility="collapsed")
 
     with menu_c3:
-        # 데이터가 있고 선택된 게 있을 때만 버튼 활성화
         df_btn = pd.DataFrame(st.session_state.claude_pool)
         if not df_btn.empty and any(df_btn['선택']):
             sel_titles = df_btn[df_btn['선택'] == True]['기사제목'].tolist()
@@ -112,9 +115,9 @@ def run_claude_collector():
     with menu_c4:
         st.markdown(f"<div style='border:1px solid #007BFF; color:#007BFF; font-weight:bold; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state.claude_pool)}</div>", unsafe_allow_html=True)
 
-    # [수집 로직] 모래시계 작동 및 API 호출
+    # [수집 로직] 실시간 카운트 반영
     if st.session_state.get('is_collecting', False):
-        with st.status("📡 슈 님의 엔진 가동 중... (모래시계 작동)", expanded=True) as status:
+        with st.status("📡 슈 님의 엔진 가동 중...", expanded=True) as status:
             engine = MasterGuardian_Smart_Claude()
             if os.path.exists('언론키워드셋.txt'):
                 with open('언론키워드셋.txt', 'r', encoding='utf-8') as f:
@@ -122,24 +125,31 @@ def run_claude_collector():
                 
                 final_results = []
                 url_bucket = set()
-                for kw in keywords:
-                    status.update(label=f"🔎 '{kw}' 판독 중...")
+                total_kw = len(keywords)
+                
+                for idx, kw in enumerate(keywords):
+                    # [반영] 슈 님 지시: '키워드' 판독 중... [현재/전체]
+                    status.update(label=f"🔎 '{kw}' 판독 중... [{idx+1}/{total_kw}]")
+                    
+                    # 네이버 + 구글 교차 수집 (중복 제거 포함)
                     articles = engine.search_naver_news(kw) + engine.search_google_news(kw)
                     for art in articles:
-                        title = re.sub(r'<[^>]*>', '', art['title']).replace('&quot;', '"').strip()
-                        if art.get('link') in url_bucket or not engine.is_risk_context(title): continue
+                        title = re.sub(r'<[^>]*>', '', art.get('title', '')).replace('&quot;', '"').strip()
+                        link = art.get('link', art.get('originallink', ''))
+                        
+                        if link in url_bucket or not engine.is_risk_context(title): continue
                         
                         final_results.append({
                             '수집시간': datetime.now().strftime('%m/%d %H:%M'),
-                            '수집키워드': kw, '기사제목': title, '링크': art.get('link'), '선택': True
+                            '수집키워드': kw, '기사제목': title, '링크': link, '선택': True
                         })
-                        url_bucket.add(art.get('link'))
+                        url_bucket.add(link)
                 st.session_state.claude_pool = final_results
             status.update(label="✅ 수집 완료", state="complete")
         st.session_state.is_collecting = False
         st.rerun()
 
-    # [UI] 테이블 꽉 차게
+    # [UI] 테이블 꽉 차게 (use_container_width=True)
     if st.session_state.claude_pool:
         df = pd.DataFrame(st.session_state.claude_pool)
         if search_query:
@@ -154,5 +164,5 @@ def run_claude_collector():
                 "링크": st.column_config.LinkColumn(" ", display_text="🔗", width=40),
                 "선택": st.column_config.CheckboxColumn(" ", width=40),
             },
-            hide_index=True, use_container_width=True, height=700, key="fixed_table"
+            hide_index=True, use_container_width=True, height=700, key="full_pure_table_final"
         )
