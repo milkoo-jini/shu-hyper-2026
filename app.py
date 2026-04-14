@@ -14,12 +14,12 @@ with st.sidebar:
     menu = st.radio("메뉴 선택", [
         "🔍 실시간 이슈 모니터링", 
         "🛠️ 리스크 키워드 확장",
-        "🛡️ 클로드 분석용 수집" # [수정] 🛡️로 통일
+        "🛡️ 클로드 분석용 언론 수집" # [수정] 🛡️로 통일
     ])
     st.markdown("---")
     
     # [수정] 중단 버튼이 실시간으로 신호를 보내도록 개선
-    if menu == "🛡️ 클로드 분석용 수집":
+    if menu == "🛡️ 클로드 분석용 언론 수집":
         if st.button("⛔ 분석 중단", use_container_width=True, type="primary"):
             st.session_state.stop_flag = True
             st.session_state.is_collecting = False
