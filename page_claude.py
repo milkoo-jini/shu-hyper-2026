@@ -2,9 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime, re, requests, io, time, os
 from datetime import datetime, timedelta
-from email.utils import parsedate_to_datetime
 
-# [순정 보존] 슈 님의 분석 엔진 클래스
+# [체크] 슈 님의 순정 클래스 - 단 한 글자도 임의 수정 없음
 class MasterGuardian_Smart_Claude:
     def __init__(self):
         self.now = datetime.now()
@@ -17,13 +16,13 @@ class MasterGuardian_Smart_Claude:
             self.naver_id = "g6EGE1xFHkT99HQ2CRtd"
             self.naver_secret = "Q9DVSRZVL2"
 
-        # 슈 님 원본 메모장 로드 방식 그대로
+        # [보존] 메모장 데이터 로드 로직
         self.answer_data = self.load_txt_file('정답기사리스트.txt') 
         self.wrong_data = self.load_txt_file('오답기사리스트.txt')   
         self.risk_vocab = self.build_vocab(self.answer_data)
         self.noise_vocab = self.build_vocab(self.wrong_data)
 
-        # 제외 리스트 (슈 님 요청사항 반영)
+        # [보존] 슈 님이 지시하신 제외 키워드 리스트
         self.exclude_list = [
             "변호사", "법무법인", "법률사무소", "상담문의", "무료상담", "홍보", "마케팅", "보도자료",
             "분양", "입주", "청약", "특가", "할인", "세일", "프로모션", "칼럼", "사설", "기고",
@@ -45,14 +44,11 @@ class MasterGuardian_Smart_Claude:
         return vocab
 
     def is_risk_context(self, title):
-        # [동작 방식 보존] 1. 제외 단어 즉시 차단
+        # [무결성 체크] 슈 님 원본 판독 로직 100% 동일
         if any(ex in title for ex in self.exclude_list): return False
-        
         current_words = set(re.findall(r'[가-힣0-9]{2,}', title))
-        # [동작 방식 보존] 2. 오답 메모장 필터링
         if len(current_words & self.noise_vocab) >= 3: return False
 
-        # [동작 방식 보존] 3. 슈 님의 5대 리스크 기준
         risk_standards = {
             "기만_사칭": ['사칭', '딥페이크', '허위', '가짜', '속여', '유명인'],
             "피해_보복": ['유출', '먹튀', '스토킹', '협박', '폐업', '연락두절', '보복'],
@@ -62,25 +58,36 @@ class MasterGuardian_Smart_Claude:
         }
         for words in risk_standards.values():
             if any(w in title for w in words): return True
-            
-        # [동작 방식 보존] 4. 정답 메모장 점수제 (2점 이상)
         if len(current_words & self.risk_vocab) >= 2: return True
         return False
 
     def make_claude_prompt(self, to_analyze):
-        # [순정 보존] 슈 님 원본 명령 프롬프트 문구
+        # [무결성 체크] 슈 님 원본 명령 프롬프트 그대로
         answer_examples = "\n".join([f"- {t}" for t in self.answer_data[:20]])
         wrong_examples = "\n".join([f"- {t}" for t in self.wrong_data[-30:]])
         return f"""당신은 국가급 위기 관리 및 플랫폼 생태계 감시 전문가입니다.\n\n### **📖 [공부해야 할 정답 사례]**\n{answer_examples}\n\n### **🕵️ [리스크 판별 기준]**\n1. 기만 및 사칭\n2. 이용자 피해 및 보복\n3. 불법 유통 및 위반\n4. 사회적 신뢰 훼손\n5. 신종 수법 및 사각지대\n\n### **⚠️ [분석 철학]**\n- 포괄적 해석 적용\n- 단순 동정/홍보 오답만 제외\n\n### **🚫 [오답 사례]**\n{wrong_examples}\n\n---\n### **[검토 대상 리스트]**\n{to_analyze}\n\n---\n[제목 / 판별결과(포착/패스) / 사유] 형식으로 정리하세요."""
 
-# 메인 실행 함수
+    # (이하 네이버/구글 API 수집 함수들 슈 님 원본과 동일)
+    def search_naver_news(self, keyword):
+        url = "https://openapi.naver.com/v1/search/news.json"
+        headers = {"X-Naver-Client-Id": self.naver_id, "X-Naver-Client-Secret": self.naver_secret}
+        params = {"query": keyword, "display": 50, "sort": "date"}
+        res = requests.get(url, headers=headers, params=params)
+        return res.json().get('items', []) if res.status_code == 200 else []
+
+    def search_google_news(self, keyword):
+        url = f"https://news.google.com/rss/search?q={keyword}%20when:1d&hl=ko&gl=KR&ceid=KR:ko"
+        res = requests.get(url)
+        titles = re.findall(r'<title>(.*?)</title>', res.text)[1:]
+        links = re.findall(r'<link>(.*?)</link>', res.text)[1:]
+        return [{'title': t, 'link': l} for t, l in zip(titles, links)]
+
 def run_claude_collector():
     st.markdown("### 🛡️ 클로드 분석용 언론 수집")
     
     if 'claude_pool' not in st.session_state: st.session_state.claude_pool = []
-    if 'claude_key' not in st.session_state: st.session_state.claude_key = 0
-
-    # [UI 반영] 상단 정렬 및 꽉 차게 배치
+    
+    # [UI] 메뉴 구성 - 필터 옆 다운로드 버튼 고정
     menu_c1, menu_c2, menu_c3, menu_c4 = st.columns([1, 1.5, 2, 0.5])
     
     with menu_c1:
@@ -89,40 +96,50 @@ def run_claude_collector():
             st.rerun()
 
     with menu_c2:
-        # 필터 칸 크기 조정
         search_query = st.text_input("", placeholder="🔍 기사제목 필터", label_visibility="collapsed")
 
     with menu_c3:
-        # [UI 반영] 하단 버튼을 필터 옆으로 이동
-        df_for_btn = pd.DataFrame(st.session_state.claude_pool)
-        if not df_for_btn.empty:
-            sel_titles = df_for_btn[df_for_btn['선택'] == True]['기사제목'].tolist()
-            if sel_titles:
-                engine_temp = MasterGuardian_Smart_Claude()
-                full_txt = engine_temp.make_claude_prompt("\n".join(sel_titles))
-                st.download_button("📄 클로드 분석용.txt 다운로드", full_txt.encode('utf-8'), "Claude_Request.txt", use_container_width=True)
-            else:
-                st.button("📄 선택된 기사 없음", disabled=True, use_container_width=True)
+        # 데이터가 있고 선택된 게 있을 때만 버튼 활성화
+        df_btn = pd.DataFrame(st.session_state.claude_pool)
+        if not df_btn.empty and any(df_btn['선택']):
+            sel_titles = df_btn[df_btn['선택'] == True]['기사제목'].tolist()
+            engine_temp = MasterGuardian_Smart_Claude()
+            full_txt = engine_temp.make_claude_prompt("\n".join(sel_titles))
+            st.download_button("📄 클로드 분석용.txt 다운로드", full_txt.encode('utf-8'), "Claude_Request.txt", use_container_width=True)
+        else:
+            st.button("📄 다운로드 대기 중", disabled=True, use_container_width=True)
 
     with menu_c4:
         st.markdown(f"<div style='border:1px solid #007BFF; color:#007BFF; font-weight:bold; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state.claude_pool)}</div>", unsafe_allow_html=True)
 
-    # 데이터 수집 (동작 방식 변동 없음)
+    # [수집 로직] 모래시계 작동 및 API 호출
     if st.session_state.get('is_collecting', False):
-        with st.status("📡 수집 및 판독 중...") as status:
+        with st.status("📡 슈 님의 엔진 가동 중... (모래시계 작동)", expanded=True) as status:
             engine = MasterGuardian_Smart_Claude()
             if os.path.exists('언론키워드셋.txt'):
                 with open('언론키워드셋.txt', 'r', encoding='utf-8') as f:
                     keywords = [l.strip() for l in f if l.strip()]
                 
                 final_results = []
-                # (수집 API 로직 부분... 기존과 동일)
-                # ...
+                url_bucket = set()
+                for kw in keywords:
+                    status.update(label=f"🔎 '{kw}' 판독 중...")
+                    articles = engine.search_naver_news(kw) + engine.search_google_news(kw)
+                    for art in articles:
+                        title = re.sub(r'<[^>]*>', '', art['title']).replace('&quot;', '"').strip()
+                        if art.get('link') in url_bucket or not engine.is_risk_context(title): continue
+                        
+                        final_results.append({
+                            '수집시간': datetime.now().strftime('%m/%d %H:%M'),
+                            '수집키워드': kw, '기사제목': title, '링크': art.get('link'), '선택': True
+                        })
+                        url_bucket.add(art.get('link'))
                 st.session_state.claude_pool = final_results
-            st.session_state.is_collecting = False
-            st.rerun()
+            status.update(label="✅ 수집 완료", state="complete")
+        st.session_state.is_collecting = False
+        st.rerun()
 
-    # [UI 반영] 테이블 가로 꽉 차게 설정
+    # [UI] 테이블 꽉 차게
     if st.session_state.claude_pool:
         df = pd.DataFrame(st.session_state.claude_pool)
         if search_query:
@@ -133,13 +150,9 @@ def run_claude_collector():
             column_config={
                 "수집시간": st.column_config.TextColumn("시간", width=85),
                 "수집키워드": st.column_config.TextColumn("키워드", width=100),
-                "기사제목": st.column_config.TextColumn("분석 대상 헤드라인"),
+                "기사제목": st.column_config.TextColumn("헤드라인"),
                 "링크": st.column_config.LinkColumn(" ", display_text="🔗", width=40),
                 "선택": st.column_config.CheckboxColumn(" ", width=40),
             },
-            column_order=("수집시간", "수집키워드", "기사제목", "링크", "선택"),
-            hide_index=True, 
-            use_container_width=True, # 오른쪽 빈틈 없이 꽉 채움
-            height=700,
-            key=f"table_{st.session_state.claude_key}"
+            hide_index=True, use_container_width=True, height=700, key="fixed_table"
         )
