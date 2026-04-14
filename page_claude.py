@@ -83,6 +83,10 @@ class MasterGuardian_Smart_Claude:
         except: return []
 
 def run_claude_collector():
+    # [히든 도어] 슈 님 전용 메뉴 활성화 체크
+    if st.query_params.get("mode") != "master":
+        return 
+
     st.markdown("### 🛡️ 클로드 분석용 언론 수집")
     
     # [수정] 데이터 세션 키
