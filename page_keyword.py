@@ -207,7 +207,7 @@ def run_keyword():
 {seed}여론조작의혹"""
 
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash-lite-preview-06-17",
+                        model="gemini-2.5-flash",
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             tools=[types.Tool(google_search=types.GoogleSearch())]
