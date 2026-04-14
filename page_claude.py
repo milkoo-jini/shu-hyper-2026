@@ -45,7 +45,7 @@ class MasterGuardian_Smart_Claude:
         current_words = set(re.findall(r'[가-힣0-9]{2,}', title))
         if len(current_words & self.noise_vocab) >= 3: return False
         
-        # [원본 그대로] 5대 리스크 기준
+        # [원본 그대로 유지] 5대 리스크 기준 및 프롬프트 로직
         risk_standards = [
             '사칭', '허위', '딥페이크', '기만', '속여', '조작', '가짜', '도용',
             '유출', '협박', '스토킹', '먹튀', '폐업', '피해', '탈취', '보복',
@@ -66,7 +66,7 @@ class MasterGuardian_Smart_Claude:
         except: return []
 
 def run_claude_collector():
-    # [수정] 🛡️ 이모지로 변경 및 컬러 폰트 적용
+    # 컬러 이모지 및 UI 설정
     st.markdown("""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
@@ -75,7 +75,7 @@ def run_claude_collector():
         <h3><span class="emoji">🛡️</span> 클로드 분석용 언론 수집</h3>
     """, unsafe_allow_html=True)
     
-    # [수정] 요청하신 캡션 문구
+    # [문구 수정] 요청하신 캡션 반영
     st.caption("AI 분석용 로우 데이터 가공")
 
     if 'claude_pool' not in st.session_state: st.session_state.claude_pool = []
@@ -100,8 +100,8 @@ def run_claude_collector():
             for i in st.session_state.claude_pool: i['선택'] = False
             st.session_state.claude_key += 1; st.rerun()
 
+    # 수집 및 상태 표시 로직
     if st.session_state.get('is_collecting', False):
-        # [반응성 개선] st.status를 사용하여 수집 중에도 중단 버튼이 동작하도록 함
         with st.status("⏳ 데이터 수집 및 리스크 필터링 중...", expanded=True) as status:
             engine = MasterGuardian_Smart_Claude()
             if os.path.exists('언론키워드셋.txt'):
@@ -110,7 +110,7 @@ def run_claude_collector():
                 
                 results = []
                 for kw in keywords:
-                    time.sleep(0.01) # 시스템이 중단 신호를 감지할 틈을 줌
+                    time.sleep(0.01) # 중단 신호 감지 여유
                     if st.session_state.get('stop_flag', False):
                         status.update(label="⛔ 분석 중단됨", state="error")
                         break
@@ -122,7 +122,7 @@ def run_claude_collector():
                             if engine.is_risk_context(title):
                                 results.append({'src': kw, 'kw': title, 'url': i['link'], '선택': True})
                 
-                if not st.session_state.stop_flag:
+                if not st.session_state.get('stop_flag', False):
                     st.session_state.claude_pool = results
                     st.session_state.claude_key += 1
                     status.update(label="✅ 수집 완료", state="complete")
@@ -137,18 +137,19 @@ def run_claude_collector():
         df = pd.DataFrame(st.session_state.claude_pool)
         if search_query:
             df = df[df['kw'].str.contains(search_query, case=False, na=False)]
+        
+        # 날짜 정보 생성 (이 로직은 데이터 가공용으로 유지)
         df['수집시점'] = datetime.datetime.now(pytz.timezone('Asia/Seoul')).strftime('%m/%d %H:%M')
         
         edited = st.data_editor(
             df,
             column_config={
-                "수집시점": st.column_config.TextColumn("시간", width=120),
                 "src": st.column_config.TextColumn("출처", width=150),
                 "kw": st.column_config.TextColumn("이슈 헤드라인 전문"),
                 "url": st.column_config.LinkColumn(" ", display_text="🔗", width=60),
                 "선택": st.column_config.CheckboxColumn(" ", width=60),
             },
-            column_order=("수집시점", "src", "kw", "url", "선택"),
+            column_order=("src", "kw", "url", "선택"),
             hide_index=True, use_container_width=True, height=800,
             key=f"table_{st.session_state.claude_key}"
         )
