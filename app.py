@@ -10,7 +10,7 @@ if 'stop_flag' not in st.session_state: st.session_state.stop_flag = False
 if 'is_collecting' not in st.session_state: st.session_state.is_collecting = False
 
 with st.sidebar:
-    st.title("🚀 업무 제어 센터")
+    st.title("🚀 QA1 업무 대시보드")
     menu = st.radio("메뉴 선택", [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
