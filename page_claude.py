@@ -64,7 +64,7 @@ class MasterGuardian_Smart_Claude:
     def search_naver_news(self, keyword):
         url = "https://openapi.naver.com/v1/search/news.json"
         headers = {"X-Naver-Client-Id": self.naver_id, "X-Naver-Client-Secret": self.naver_secret}
-        params = {"query": keyword, "display": 50, "sort": "date"}
+        params = {"query": keyword, "display": 20, "sort": "date"}
         try:
             res = requests.get(url, headers=headers, params=params)
             return res.json().get('items', []) if res.status_code == 200 else []
