@@ -86,7 +86,7 @@ def run_claude_collector():
     st.markdown("### 🛡️ 클로드 분석용 언론 수집")
     
     # [강제 조치] 유령 데이터 1만 개 격리를 위한 새로운 키 사용
-    final_key = "cl_perfect_stable_final"
+    final_key = "TOTAL_CLEAN_START_0414_FINAL"
     if final_key not in st.session_state: 
         st.session_state[final_key] = []
     
