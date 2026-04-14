@@ -15,7 +15,6 @@ class MasterGuardian_Smart_Claude:
             self.naver_secret = st.secrets["NAVER_SECRET"]
         except:
             self.naver_id = self.naver_secret = None
-
         self.kst = pytz.timezone('Asia/Seoul')
         self.answer_data = self.load_txt_file('정답기사리스트.txt')
         self.wrong_data = self.load_txt_file('오답기사리스트.txt')
@@ -40,14 +39,13 @@ class MasterGuardian_Smart_Claude:
         try:
             pub_time = email.utils.parsedate_to_datetime(pub_date).timestamp()
             return (time.time() - pub_time) <= self.time_limit
-        except:
-            return True
+        except: return True
 
     def is_risk_context(self, title):
         current_words = set(re.findall(r'[가-힣0-9]{2,}', title))
         if len(current_words & self.noise_vocab) >= 3: return False
         
-        # [수정 금지] 5대 리스크 기준
+        # [원본 그대로] 5대 리스크 기준
         risk_standards = [
             '사칭', '허위', '딥페이크', '기만', '속여', '조작', '가짜', '도용',
             '유출', '협박', '스토킹', '먹튀', '폐업', '피해', '탈취', '보복',
@@ -68,23 +66,21 @@ class MasterGuardian_Smart_Claude:
         except: return []
 
 def run_claude_collector():
-    # 컬러 이모지 및 제목
+    # [수정] 🛡️ 이모지로 변경 및 컬러 폰트 적용
     st.markdown("""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
             .emoji { font-family: 'Noto Color Emoji', sans-serif !important; }
         </style>
-        <h3><span class="emoji">🤖</span> 클로드 분석용 언론 수집</h3>
+        <h3><span class="emoji">🛡️</span> 클로드 분석용 언론 수집</h3>
     """, unsafe_allow_html=True)
     
-    # [수정] 캡션 문구 변경
+    # [수정] 요청하신 캡션 문구
     st.caption("AI 분석용 로우 데이터 가공")
 
     if 'claude_pool' not in st.session_state: st.session_state.claude_pool = []
     if 'claude_key' not in st.session_state: st.session_state.claude_key = 0
-    if 'is_collecting' not in st.session_state: st.session_state.is_collecting = False
 
-    # 컨트롤 바
     c1, c2, c3, c4, c5 = st.columns([1.5, 2, 0.5, 0.5, 0.5])
     with c1:
         if st.button("🚀 로우 데이터 수집 시작", use_container_width=True):
@@ -104,36 +100,36 @@ def run_claude_collector():
             for i in st.session_state.claude_pool: i['선택'] = False
             st.session_state.claude_key += 1; st.rerun()
 
-    spinner_placeholder = st.empty()
-
-    if st.session_state.is_collecting:
-        with spinner_placeholder.container():
-            # [수정] 담백한 업무용 문구로 변경
-            with st.spinner("⏳ 데이터 수집 및 리스크 필터링 중..."):
-                engine = MasterGuardian_Smart_Claude()
-                if os.path.exists('언론키워드셋.txt'):
-                    with open('언론키워드셋.txt', 'r', encoding='utf-8') as f:
-                        keywords = [l.strip() for l in f if l.strip()]
+    if st.session_state.get('is_collecting', False):
+        # [반응성 개선] st.status를 사용하여 수집 중에도 중단 버튼이 동작하도록 함
+        with st.status("⏳ 데이터 수집 및 리스크 필터링 중...", expanded=True) as status:
+            engine = MasterGuardian_Smart_Claude()
+            if os.path.exists('언론키워드셋.txt'):
+                with open('언론키워드셋.txt', 'r', encoding='utf-8') as f:
+                    keywords = [l.strip() for l in f if l.strip()]
+                
+                results = []
+                for kw in keywords:
+                    time.sleep(0.01) # 시스템이 중단 신호를 감지할 틈을 줌
+                    if st.session_state.get('stop_flag', False):
+                        status.update(label="⛔ 분석 중단됨", state="error")
+                        break
                     
-                    results = []
-                    for kw in keywords:
-                        if st.session_state.get('stop_flag', False):
-                            st.warning("분석이 중단되었습니다.")
-                            break
-                        
-                        items = engine.search_naver_news(kw)
-                        for i in items:
-                            if engine.is_within_time(i.get('pubDate', '')):
-                                title = BeautifulSoup(i['title'], 'html.parser').get_text()
-                                if engine.is_risk_context(title):
-                                    results.append({'src': kw, 'kw': title, 'url': i['link'], '선택': True})
-                    
+                    items = engine.search_naver_news(kw)
+                    for i in items:
+                        if engine.is_within_time(i.get('pubDate', '')):
+                            title = BeautifulSoup(i['title'], 'html.parser').get_text()
+                            if engine.is_risk_context(title):
+                                results.append({'src': kw, 'kw': title, 'url': i['link'], '선택': True})
+                
+                if not st.session_state.stop_flag:
                     st.session_state.claude_pool = results
                     st.session_state.claude_key += 1
-                
-                st.session_state.is_collecting = False
-                spinner_placeholder.empty()
-                st.rerun()
+                    status.update(label="✅ 수집 완료", state="complete")
+            
+            st.session_state.is_collecting = False
+            time.sleep(0.5)
+            st.rerun()
 
     st.divider()
     
@@ -141,7 +137,6 @@ def run_claude_collector():
         df = pd.DataFrame(st.session_state.claude_pool)
         if search_query:
             df = df[df['kw'].str.contains(search_query, case=False, na=False)]
-            
         df['수집시점'] = datetime.datetime.now(pytz.timezone('Asia/Seoul')).strftime('%m/%d %H:%M')
         
         edited = st.data_editor(
