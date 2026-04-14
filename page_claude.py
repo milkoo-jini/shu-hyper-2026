@@ -88,35 +88,7 @@ class MasterGuardian_Smart_Claude:
         return False
 
     def make_claude_prompt(self, to_analyze):
-        answer_examples = "\n".join([f"- {t}" for t in self.answer_data[:20]])
-        wrong_examples  = "\n".join([f"- {t}" for t in self.wrong_data[-30:]])
-        return f"""당신은 국가급 위기 관리 및 플랫폼 생태계 감시 전문가입니다.
-
-### **📖 [공부해야 할 정답 사례]**
-{answer_examples if answer_examples else "사례 분석 중..."}
-
-### **🕵️ [리스크 판별 기준 - 아래 본질이 보이면 무조건 포착]**
-1. **기만 및 사칭**: 사칭, 허위 정보, 딥페이크 등 사용자를 속이는 행위.
-2. **이용자 피해 및 보복**: 유출, 협박, 스토킹, 금전적 먹튀, 기습 폐업 등.
-3. **불법 유통 및 위반**: 마약, 짝퉁, 도박 사이트 유도, 성착취물 등.
-4. **사회적 신뢰 훼손**: 비리, 부정부패, 선거법 위반, 국가 기관 보안 사고 등.
-5. **신종 수법 및 사각지대**: 플랫폼 취약점을 악용하는 모든 비정상적 영업.
-
-### **⚠️ [분석 철학]**
-- **카테고리에 갇히지 마십시오**: 정치, 경제, 사회 등 분야 상관없이 위 기준에 해당하면 리스크입니다.
-- **포괄적 해석**: 정답 사례와 단어가 달라도, 피해자가 발생하거나 법을 어기는 본질이 같다면 포착하세요.
-- **오답만 제외**: 아래 명시된 단순 동정/홍보 뉴스만 필터링하십시오.
-
-### **🚫 [오답 사례 - 무조건 패스]**
-{wrong_examples if wrong_examples else "없음"}
-
----
-### **[검토 대상 리스트]**
-{to_analyze}
-
----
-[제목 / 판별결과(포착/패스) / 사유] 형식으로 정리하세요."""
-
+        return to_analyze
     def search_naver_news(self, keyword):
         url = "https://openapi.naver.com/v1/search/news.json"
         headers = {"X-Naver-Client-Id": self.naver_id, "X-Naver-Client-Secret": self.naver_secret}
@@ -190,7 +162,7 @@ def run_claude_collector():
             sel_titles = df_btn[df_btn['선택'] == True]['기사제목'].tolist()
             engine_temp = MasterGuardian_Smart_Claude()
             full_txt = engine_temp.make_claude_prompt("\n".join(sel_titles))
-            st.download_button("📄 분석용.txt 다운로드", full_txt.encode('utf-8'), "Claude_Task.txt", use_container_width=True)
+            st.download_button("📄 클로드 분석용.txt 다운로드", full_txt.encode('utf-8'), "Claude_Task.txt", use_container_width=True)
         else:
             st.button("📄 대기 중", disabled=True, use_container_width=True)
 
@@ -239,7 +211,8 @@ def run_claude_collector():
 
                         url_bucket.add(link)
                         final_filtered.append({
-                            '수집시간': datetime.now(engine.kst).strftime('%H:%M'),
+                            '수집시간': datetime.now(engine.kst).strftime('%m/%d %H:%M'),
+                            '검색키워드': kw,
                             '기사제목': title,
                             '링크': link,
                             '선택': True
@@ -259,11 +232,13 @@ def run_claude_collector():
         st.data_editor(
             df,
             column_config={
-                "수집시간": st.column_config.TextColumn("시간", width=85),
+                "수집시간": st.column_config.TextColumn("시간", width=100),
+                "검색키워드": st.column_config.TextColumn("키워드", width=120),
                 "기사제목": st.column_config.TextColumn("헤드라인"),
                 "링크": st.column_config.LinkColumn(" ", display_text="🔗", width=40),
                 "선택": st.column_config.CheckboxColumn(" ", width=40),
             },
+            column_order=("수집시간", "검색키워드", "기사제목", "링크", "선택"),
             hide_index=True, use_container_width=True, height=700,
             key=f"EDITOR_V2_{len(st.session_state[DATA_KEY])}"
         )
