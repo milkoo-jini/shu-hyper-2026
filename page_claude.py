@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd
 import datetime, re, requests, io, time, os
 from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher # 중복 기사 판별용
 
-# [무결성 체크] 슈 님의 순정 클래스 - 판독 기준 및 단어 리스트 100% 보존
+# [무결성 체크] 슈 님의 순정 클래스 - 기준 로직 100% 보존
 class MasterGuardian_Smart_Claude:
     def __init__(self):
-        # 한국 시간대(KST) 강제 설정 (시차 버그 수정)
         self.kst = timezone(timedelta(hours=9))
         self.now = datetime.now(self.kst)
         
@@ -17,13 +17,13 @@ class MasterGuardian_Smart_Claude:
             self.naver_id = ""
             self.naver_secret = ""
 
-        # [보존] 메모장 데이터 로드 로직
+        # 슈 님의 원본 데이터 로드
         self.answer_data = self.load_txt_file('정답기사리스트.txt') 
         self.wrong_data = self.load_txt_file('오답기사리스트.txt')   
         self.risk_vocab = self.build_vocab(self.answer_data)
         self.noise_vocab = self.build_vocab(self.wrong_data)
 
-        # [보존] 제외 키워드 리스트 (슈 님의 32개 단어 그대로)
+        # [보존] 제외 키워드 리스트 32개 그대로 유지
         self.exclude_list = [
             "변호사", "법무법인", "법률사무소", "상담문의", "무료상담", "홍보", "마케팅", "보도자료",
             "분양", "입주", "청약", "특가", "할인", "세일", "프로모션", "칼럼", "사설", "기고",
@@ -45,7 +45,7 @@ class MasterGuardian_Smart_Claude:
         return vocab
 
     def is_risk_context(self, title):
-        # [순정 보존] 슈 님의 판독 로직 100% 유지 (점수제 및 5대 기준)
+        # [순정 보존] 슈 님의 판독 로직 100% 유지
         if any(ex in title for ex in self.exclude_list): return False
         current_words = set(re.findall(r'[가-힣0-9]{2,}', title))
         if len(current_words & self.noise_vocab) >= 3: return False
@@ -85,84 +85,87 @@ class MasterGuardian_Smart_Claude:
 def run_claude_collector():
     st.markdown("### 🛡️ 클로드 분석용 언론 수집")
     
-    # [강제 조치] 유령 데이터 1만 개 격리를 위한 새로운 키 사용
-    final_key = "TOTAL_CLEAN_START_0414_FINAL"
-    if final_key not in st.session_state: 
-        st.session_state[final_key] = []
+    # [수정] 데이터 세션 키
+    DATA_KEY = "FINAL_FILTERED_STORAGE_V2"
+    if DATA_KEY not in st.session_state: 
+        st.session_state[DATA_KEY] = []
     
     menu_c1, menu_c2, menu_c3, menu_c4 = st.columns([1, 1.5, 2, 0.5])
     
     with menu_c1:
         if st.button("🚀 수집 시작", use_container_width=True):
-            # 수집 클릭 시 기존 데이터를 메모리에서 즉시 삭제
-            st.session_state[final_key] = []
+            st.session_state[DATA_KEY] = []
             st.session_state.is_collecting = True
             st.rerun()
 
     with menu_c2:
-        search_query = st.text_input("", placeholder="🔍 기사제목 필터", label_visibility="collapsed")
+        search_query = st.text_input("", placeholder="🔍 필터", label_visibility="collapsed")
 
     with menu_c3:
-        df_btn = pd.DataFrame(st.session_state[final_key])
+        df_btn = pd.DataFrame(st.session_state[DATA_KEY])
         if not df_btn.empty and any(df_btn['선택']):
             sel_titles = df_btn[df_btn['선택'] == True]['기사제목'].tolist()
             engine_temp = MasterGuardian_Smart_Claude()
             full_txt = engine_temp.make_claude_download_txt("\n".join(sel_titles))
-            st.download_button("📄 클로드 분석용.txt 다운로드", full_txt.encode('utf-8'), "Claude_Request.txt", use_container_width=True)
+            st.download_button("📄 분석용.txt 다운로드", full_txt.encode('utf-8'), "Claude_Task.txt", use_container_width=True)
         else:
-            st.button("📄 다운로드 대기 중", disabled=True, use_container_width=True)
+            st.button("📄 대기 중", disabled=True, use_container_width=True)
 
     with menu_c4:
-        # 화면에 찍히는 기사의 정확한 개수 출력
-        st.markdown(f"<div style='border:1px solid #007BFF; color:#007BFF; font-weight:bold; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state[final_key])}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='border:1px solid #007BFF; color:#007BFF; font-weight:bold; border-radius:5px; padding:5.5px; text-align:center;'>{len(st.session_state[DATA_KEY])}</div>", unsafe_allow_html=True)
 
     if st.session_state.get('is_collecting', False):
-        with st.status("📡 슈 님의 엔진 가동 중...", expanded=True) as status:
+        with st.status("📡 전수 조사 중 (중복 박멸 모드)...", expanded=True) as status:
             engine = MasterGuardian_Smart_Claude()
-            kst = timezone(timedelta(hours=9)) # 한국 시간대
             
             if os.path.exists('언론키워드셋.txt'):
                 with open('언론키워드셋.txt', 'r', encoding='utf-8') as f:
-                    keywords = [l.strip() for l in f if l.strip()]
+                    keywords = list(set([l.strip() for l in f if l.strip()]))
                 
-                temp_results = []
-                unique_links = set() # 중복 기사 필터 (원본 1개 보존)
-                total_kw = len(keywords)
-                
-                # 버튼을 누른 바로 그 시점의 한국 시간 고정
-                current_kst_time = datetime.now(kst).strftime('%m/%d %H:%M')
-                
+                # [수정] 1단계: 모든 키워드의 기사를 링크 기준으로 1차 취합 (raw_pool)
+                raw_pool = {} 
                 for idx, kw in enumerate(keywords):
-                    status.update(label=f"🔎 '{kw}' 판독 중... [{idx+1}/{total_kw}]")
+                    status.update(label=f"🔎 1차 수집: '{kw}' ({idx+1}/{len(keywords)})")
                     all_news = engine.search_naver_news(kw) + engine.search_google_news(kw)
                     
                     for art in all_news:
                         link = art.get('link', art.get('originallink', ''))
-                        # 링크 중복 체크 (똑같은 기사는 절대 2번 담기지 않음)
-                        if not link or link in unique_links:
-                            continue
+                        if not link or link in raw_pool: continue
                         
                         title = re.sub(r'<[^>]*>', '', art.get('title', '')).replace('&quot;', '"').strip()
-                        
-                        # [순정 보존] 슈 님의 리스크 판독 로직 통과 여부 확인
-                        if not engine.is_risk_context(title):
-                            continue
-                        
-                        temp_results.append({
-                            '수집시간': current_kst_time, # 정확한 한국 시간
-                            '수집키워드': kw, '기사제목': title, '링크': link, '선택': True
+                        # 슈 님의 순정 로직 통과 여부 확인
+                        if engine.is_risk_context(title):
+                            raw_pool[link] = title
+
+                # [수정] 2단계: 수집 완료 후 모든 기사 대상 제목 유사도 전수 조사
+                status.update(label="🧪 2차 필터링: 유사 기사 통합 중...")
+                final_filtered = []
+                current_time = datetime.now(engine.kst).strftime('%H:%M')
+                
+                for link, title in raw_pool.items():
+                    is_dup = False
+                    for seen in final_filtered:
+                        # 제목 유사도 80% 이상이면 동일 기사로 간주하여 제외
+                        if SequenceMatcher(None, title, seen['기사제목']).ratio() > 0.8:
+                            is_dup = True
+                            break
+                    if not is_dup:
+                        final_filtered.append({
+                            '수집시간': current_time, 
+                            '기사제목': title, 
+                            '링크': link, 
+                            '선택': True
                         })
-                        unique_links.add(link) 
                 
-                # 수집 종료 후 세션 업데이트 (누적 원천 차단)
-                st.session_state[final_key] = temp_results
+                # 결과값 덮어쓰기
+                st.session_state[DATA_KEY] = final_filtered
                 
-            status.update(label="✅ 수집 완료", state="complete")
+            status.update(label="✅ 수집 및 중복 제거 완료", state="complete")
         st.session_state.is_collecting = False
         st.rerun()
 
-    if st.session_state[final_key]:
-        df = pd.DataFrame(st.session_state[final_key])
+    if st.session_state[DATA_KEY]:
+        df = pd.DataFrame(st.session_state[DATA_KEY])
         if search_query:
             df = df[df['기사제목'].str.contains(search_query, case=False, na=False)]
         
@@ -170,10 +173,10 @@ def run_claude_collector():
             df,
             column_config={
                 "수집시간": st.column_config.TextColumn("시간", width=85),
-                "수집키워드": st.column_config.TextColumn("키워드", width=100),
                 "기사제목": st.column_config.TextColumn("헤드라인"),
                 "링크": st.column_config.LinkColumn(" ", display_text="🔗", width=40),
                 "선택": st.column_config.CheckboxColumn(" ", width=40),
             },
-            hide_index=True, use_container_width=True, height=700, key="final_no_more_bugs_v99"
+            hide_index=True, use_container_width=True, height=700,
+            key=f"EDITOR_V2_{len(st.session_state[DATA_KEY])}"
         )
