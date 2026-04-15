@@ -33,27 +33,12 @@ st.markdown("""
         [data-testid="stSidebar"] .stRadio label { padding: 0.4rem 0.6rem !important; border-radius: 6px !important; transition: background 0.2s !important; }
         [data-testid="stSidebar"] .stRadio label:hover { background-color: #e9ecef !important; }
         [data-testid="stSidebar"] .stCaption { color: #868e96 !important; font-size: 0.75rem !important; text-align: center !important; }
-
-        /* [선 보정 핵심] 텍스트가 뭐든 상관없이 4번째 항목을 '진짜 실선'으로 강제 변환 */
-        div[data-testid="stSidebar"] .stRadio [role="radiogroup"] > div:nth-of-type(4) {
-            border-top: 1px solid #dee2e6 !important;
-            height: 0px !important;
-            margin: 1.2rem 0 !important; /* 위아래 st.markdown("---")과 똑같은 간격 */
-            padding: 0 !important;
-            pointer-events: none !important;
-            overflow: hidden !important;
-        }
-        /* 4번째 항목 내부의 라디오 버튼과 글자를 완전히 소멸시킴 */
-        div[data-testid="stSidebar"] .stRadio [role="radiogroup"] > div:nth-of-type(4) * {
-            display: none !important;
-            visibility: hidden !important;
-        }
     </style>
 """, unsafe_allow_html=True)
 
 # 3. 관리자 인증 로직 (원본 유지)
 def check_admin_pw():
-    current_selected = st.session_state.get("total_menu_radio")
+    current_selected = st.session_state.get("main_menu") or st.session_state.get("tool_menu")
     if current_selected == "리스크 키워드 확장":
         target_pw = st.secrets["ADMIN_PASSWORD"]
     else:
@@ -66,41 +51,52 @@ def check_admin_pw():
         st.error("비밀번호 불일치")
 
 # 4. 상태 변수 초기화
-if 'admin_mode' not in st.session_state: 
+if 'admin_mode' not in st.session_state:
     st.session_state.admin_mode = False
+
+# 콜백 — 한쪽 선택 시 다른 쪽 초기화
+def on_main_change():
+    st.session_state.tool_menu = None
+
+def on_tool_change():
+    st.session_state.main_menu = None
 
 # --- 사이드바 영역 ---
 with st.sidebar:
     st.title("🚀 QA1 AI 업무 대시보드")
     st.markdown("---")
-    
+
     st.markdown("### 📋 메뉴 선택")
 
-    menu_list = [
-        "클로드 분석용 언론 수집",
-        "실시간 이슈 모니터링", 
-        "리스크 키워드 확장",
-        "DIVIDER",
-        "도메인 추출🚧",
-        "단어 조합 생성기🚧"
-    ]
-
-    menu_main = st.sidebar.radio(
+    menu_main = st.radio(
         "메뉴 선택",
-        menu_list,
+        ["클로드 분석용 언론 수집", "실시간 이슈 모니터링", "리스크 키워드 확장"],
         index=1,
-        key="total_menu_radio",
-        label_visibility="collapsed"
+        key="main_menu",
+        label_visibility="collapsed",
+        on_change=on_main_change
     )
-    
+
     st.markdown("---")
 
-    is_secure_selected = menu_main in ["도메인 추출🚧", "리스크 키워드 확장", "단어 조합 생성기🚧"]
+    menu_tool = st.radio(
+        "도구",
+        ["도메인 추출🚧", "단어 조합 생성기🚧"],
+        index=None,
+        key="tool_menu",
+        label_visibility="collapsed",
+        on_change=on_tool_change
+    )
+
+    st.markdown("---")
+
+    menu_selected = st.session_state.get("tool_menu") or menu_main
+    is_secure_selected = menu_selected in ["도메인 추출🚧", "리스크 키워드 확장", "단어 조합 생성기🚧"]
 
     if is_secure_selected:
         if not st.session_state.admin_mode:
             st.markdown("### 🔐 관리자 인증")
-            st.text_input("접속 비밀번호", type="password", 
+            st.text_input("접속 비밀번호", type="password",
                          label_visibility="collapsed", placeholder="비밀번호 입력",
                          key="admin_pw_entry", on_change=check_admin_pw)
             if st.button("인증", use_container_width=True):
@@ -114,15 +110,17 @@ with st.sidebar:
 
     st.caption("v2.1 Hybrid Engine (AI + Local)")
 
-# --- 본문 실행 영역 (원본 유지) ---
-if menu_main == "단어 조합 생성기🚧":
+# --- 본문 실행 영역 ---
+current_tool = st.session_state.get("tool_menu")
+
+if current_tool == "단어 조합 생성기🚧":
     if st.session_state.admin_mode: run_combiner()
+    else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
+elif current_tool == "도메인 추출🚧":
+    if st.session_state.admin_mode: run_domain_collector()
     else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "리스크 키워드 확장":
     if st.session_state.admin_mode: run_keyword()
-    else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
-elif menu_main == "도메인 추출🚧":
-    if st.session_state.admin_mode: run_domain_collector()
     else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "실시간 이슈 모니터링":
     run_monitor()
