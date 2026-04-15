@@ -212,12 +212,30 @@ class ShuMonitorEngine:
 
         for t in self.fixed_topics:
             try:
+                # 네이버 뉴스
                 t_res = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={urllib.parse.quote(t)}&display=25&sort=date", headers=h, timeout=5).json()
                 items = t_res.get('items', [])
-                # 북중미 월드컵은 제목에 '월드컵' 포함된 기사만, 지방선거는 필터 없음
+                # 북중미 월드컵은 제목에 '월드컵' 또는 '북중미' 포함된 기사만, 지방선거는 필터 없음
                 if t == "북중미 월드컵":
                     items = [i for i in items if '월드컵' in BeautifulSoup(i.get('title', ''), 'html.parser').get_text() or '북중미' in BeautifulSoup(i.get('title', ''), 'html.parser').get_text()]
                 pool.extend(self._process_naver(items, f"🔥 {t} 이슈"))
+
+                # 구글 뉴스
+                eq = urllib.parse.quote(t)
+                g_res = requests.get(f"https://news.google.com/rss/search?q={eq}&hl=ko&gl=KR&ceid=KR:ko", headers=self.headers, timeout=5)
+                now = datetime.datetime.now(self.kst)
+                for i in BeautifulSoup(g_res.text, 'xml').find_all('item')[:20]:
+                    title = i.title.text
+                    try:
+                        pub = i.pubDate.text[:25].strip()
+                        p_date = datetime.datetime.strptime(pub, '%a, %d %b %Y %H:%M:%S')
+                        p_date = pytz.utc.localize(p_date).astimezone(self.kst)
+                        if (now - p_date).total_seconds() > self.time_limit:
+                            continue
+                    except:
+                        pass
+                    if not self._is_excluded(title):
+                        pool.append({'src': f"🔥 {t} 이슈", 'kw': title, 'desc': '', 'url': i.link.text})
             except:
                 pass
 
