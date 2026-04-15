@@ -128,7 +128,7 @@ with st.sidebar:
     menu_main = st.radio("메뉴 선택", [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
-        "카페 도메인 추출🚧",
+        "도메인 추출🚧",
         "리스크 키워드 확장"
     ], index=1, key="main_menu", on_change=reset_tool)
     
@@ -139,7 +139,7 @@ with st.sidebar:
     
     st.markdown("---")
 
-    is_secure_selected = (menu_main == "카페 도메인 추출🚧") or (menu_main == "리스크 키워드 확장") or (st.session_state.get("tool_menu") == "단어 조합 생성기🚧")
+    is_secure_selected = (menu_main == "도메인 추출🚧") or (menu_main == "리스크 키워드 확장") or (st.session_state.get("tool_menu") == "단어 조합 생성기🚧")
 
     if is_secure_selected:
         if not st.session_state.admin_mode:
@@ -171,7 +171,7 @@ elif menu_main == "리스크 키워드 확장":
         run_keyword()
     else:
         st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
-elif menu_main == "카페 도메인 추출🚧":
+elif menu_main == "도메인 추출🚧":
     if st.session_state.admin_mode:
         run_domain_collector()
     else:
