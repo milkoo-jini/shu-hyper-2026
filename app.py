@@ -35,18 +35,15 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 관리자 인증 로직 (수정됨: 요청하신 비번 매칭)
+# 3. 관리자 인증 로직 (수정: 변수명 불일치 해결)
 def check_admin_pw():
-    menu = st.session_state.get("main_menu")
-    tool = st.session_state.get("tool_menu")
+    # 선택된 메뉴 변수를 가져옵니다.
+    current_selected = st.session_state.get("total_menu_radio")
     
     # 리스크 키워드 확장 -> ADMIN_PASSWORD 사용
-    if menu == "리스크 키워드 확장":
+    if current_selected == "리스크 키워드 확장":
         target_pw = st.secrets["ADMIN_PASSWORD"]
-    # 도메인 추출, 단어 조합 생성기 -> COMBINER_PW 사용
-    elif menu == "도메인 추출🚧" or tool == "단어 조합 생성기🚧":
-        target_pw = st.secrets["COMBINER_PW"]
-    # 그 외 (기본값)
+    # 그 외 보안 메뉴 -> COMBINER_PW 사용
     else:
         target_pw = st.secrets["COMBINER_PW"]
 
@@ -60,46 +57,36 @@ def check_admin_pw():
 if 'admin_mode' not in st.session_state: 
     st.session_state.admin_mode = False
 
-def reset_tool(): 
-    st.session_state.tool_menu = None
-    st.session_state.admin_mode = False  # 메뉴 이동 시 인증 해제
-def reset_main(): 
-    st.session_state.main_menu = None
-    st.session_state.admin_mode = False  # 메뉴 이동 시 인증 해제
-
 # --- 사이드바 영역 ---
 with st.sidebar:
     st.title("🚀 QA1 AI 업무 대시보드")
     st.markdown("---")
     
-# 1. 사이드바 메뉴 제목
-    st.sidebar.markdown("### 📋 메뉴 선택")
+    st.markdown("### 📋 메뉴 선택")
 
-    # 2. 모든 메뉴를 하나로 합치기 (그래야 하나만 선택됩니다)
-    # 중간에 '---'를 넣어 시각적으로 구분합니다.
     menu_list = [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
         "리스크 키워드 확장",
-        "────────────────", # 구분선 역할 (선택은 되지만 시각적 용도)
+        "────────────────",
         "도메인 추출🚧",
         "단어 조합 생성기🚧"
     ]
 
-    # 3. 라디오 버튼 하나로 통합
-    selected_menu = st.sidebar.radio(
-        "메뉴 선택", # 라벨이 보기 싫으면 label_visibility="collapsed" 추가
+    # 통합 라디오 버튼 (변수명을 menu_main으로 설정하여 하단 호환성 유지)
+    menu_main = st.sidebar.radio(
+        "메뉴 선택",
         menu_list,
-        index=1, # 기본값: 실시간 이슈 모니터링
+        index=1,
         key="total_menu_radio"
     )
     
     st.markdown("---")
 
-    # 보안 대상 메뉴 설정
+    # 보안 대상 메뉴 설정 (변수명 menu_main 사용)
     is_secure_selected = (menu_main == "도메인 추출🚧") or \
                          (menu_main == "리스크 키워드 확장") or \
-                         (st.session_state.get("tool_menu") == "단어 조합 생성기🚧")
+                         (menu_main == "단어 조합 생성기🚧")
 
     if is_secure_selected:
         if not st.session_state.admin_mode:
@@ -118,10 +105,10 @@ with st.sidebar:
 
     st.caption("v2.1 Hybrid Engine (AI + Local)")
 
-# --- 본문 실행 영역 ---
-current_tool = st.session_state.get("tool_menu")
-
-if current_tool == "단어 조합 생성기🚧":
+# --- 본문 실행 영역 (menu_main 변수 하나로 제어) ---
+if menu_main == "────────────────":
+    st.info("👈 사이드바에서 메뉴를 선택해 주세요.")
+elif menu_main == "단어 조합 생성기🚧":
     if st.session_state.admin_mode:
         run_combiner()
     else:
