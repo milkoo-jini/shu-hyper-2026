@@ -9,11 +9,10 @@ st.set_page_config(layout="wide", page_title="Shu Risk Center", page_icon="🚨"
 # 상태 변수 초기화
 if 'admin_mode' not in st.session_state: st.session_state.admin_mode = False
 
-# [원본 로직] 엔터 키 입력 시 바로 인증 처리하기 위한 함수
-def check_password():
-    if st.session_state.admin_pw_input == st.secrets["COMBINER_PW"]:
+# [원본 로직] 엔터키 입력 시 즉시 인증
+def check_admin_pw():
+    if st.session_state.admin_pw_entry == st.secrets["COMBINER_PW"]:
         st.session_state.admin_mode = True
-        st.session_state.admin_pw_input = "" # 입력칸 비우기
     else:
         st.error("비밀번호 불일치")
 
@@ -25,7 +24,7 @@ with st.sidebar:
     st.title("🚀 QA1 업무 대시보드")
     st.markdown("---")
     
-    # 1. 상단 메뉴
+    # 1. 메인 메뉴
     menu_main = st.radio("메뉴 선택", [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
@@ -34,27 +33,32 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 2. 하단 도구 메뉴
+    # 2. 도구 메뉴
     menu_tool = st.radio("도구", ["단어 조합 생성기"], 
                          index=None, key="tool_menu", on_change=reset_main, label_visibility="collapsed")
     
     st.markdown("---")
 
-    # 3. [원본 복구] 관리자 인증 (엔터 입력 가능)
-    with st.sidebar.expander("🔐 관리자 인증"):
-        if not st.session_state.admin_mode:
-            # on_change를 사용하여 엔터키 입력 시 즉시 check_password 실행
-            st.text_input("Password", type="password", key="admin_pw_input", on_change=check_password)
-            st.button("로그인", use_container_width=True, on_click=check_password)
-        else:
-            st.success("인증 완료")
-            if st.button("로그아웃", use_container_width=True):
-                st.session_state.admin_mode = False
-                st.rerun()
+    # [핵심] 현재 선택된 메뉴가 보안 메뉴인지 체크
+    # 상단 라디오에서 '리스크 키워드 확장'을 골랐거나, 하단 '도구'에서 '단어 조합 생성기'를 골랐을 때만 True
+    is_secure_selected = (menu_main == "리스크 키워드 확장") or (st.session_state.get("tool_menu") == "단어 조합 생성기")
+
+    # 3. [디자인 & 조건부 노출 복구] 보안 메뉴일 때만 인증창 등장
+    if is_secure_selected:
+        with st.sidebar.expander("🔐 관리자 모드"):
+            if not st.session_state.admin_mode:
+                st.text_input("PW", type="password", placeholder="비밀번호 입력 후 Enter", 
+                             key="admin_pw_entry", on_change=check_admin_pw, label_visibility="collapsed")
+                if st.button("인증", use_container_width=True):
+                    check_admin_pw()
+            else:
+                st.success("인증 완료")
+                if st.button("잠금", use_container_width=True):
+                    st.session_state.admin_mode = False
+                    st.rerun()
+        st.markdown("---")
     
-    st.markdown("---")
-    
-    # 중단 버튼 및 캡션 (원본 유지)
+    # 중단 버튼 및 캡션
     if menu_main == "클로드 분석용 언론 수집":
         if st.button("⛔ 분석 중단", use_container_width=True, type="primary"):
             st.session_state.stop_flag = True
@@ -71,12 +75,12 @@ if current_tool == "단어 조합 생성기":
     if st.session_state.admin_mode:
         run_combiner()
     else:
-        st.warning("🔐 '단어 조합 생성기'는 관리자 인증이 필요합니다.")
+        st.info("👈 관리자 인증이 필요한 메뉴입니다.")
 elif menu_main == "리스크 키워드 확장":
     if st.session_state.admin_mode:
         run_keyword()
     else:
-        st.warning("🔐 '리스크 키워드 확장'은 관리자 인증이 필요합니다.")
+        st.info("👈 관리자 인증이 필요한 메뉴입니다.")
 elif menu_main == "실시간 이슈 모니터링":
     run_monitor()
 elif menu_main == "클로드 분석용 언론 수집":
