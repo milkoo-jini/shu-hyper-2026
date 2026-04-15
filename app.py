@@ -26,6 +26,7 @@ st.markdown("""
         [data-testid="stSidebar"] .stButton button { border-radius: 6px !important; }
         hr { border-color: #dee2e6 !important; margin: 0.8rem 0 !important; }
         [data-testid="stSidebar"] hr { margin: 0.3rem 0 !important; }
+        [data-testid="stSidebar"] .stRadio { margin-bottom: 0 !important; padding-bottom: 0 !important; }
         .stButton button { border-radius: 6px !important; font-weight: 500 !important; }
         .stTextInput input { border-radius: 6px !important; }
         .stDataFrame thead tr th { background-color: #f1f3f5 !important; color: #495057 !important; font-weight: 600 !important; }
