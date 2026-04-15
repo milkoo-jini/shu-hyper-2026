@@ -76,7 +76,6 @@ st.markdown("""
 
         /* 사이드바 타이틀 */
         [data-testid="stSidebar"] h1 {
-            font-size: 1.1rem !important;
             color: #1e3a8a !important;
             font-weight: 700 !important;
         }
