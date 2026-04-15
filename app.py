@@ -8,9 +8,10 @@ from page_scroll import run_domain_collector
 # 1. 페이지 설정
 st.set_page_config(layout="wide", page_title="Shu Risk Center", page_icon="🚨")
 
-# 2. 공통 CSS
+# 2. 공통 CSS (슈 님의 기존 디자인 100% 유지 + 선 보정 추가)
 st.markdown("""
     <style>
+        /* [기존 디자인 유지] */
         [data-testid="stHeader"], [data-testid="stDecoration"], [data-testid="stToolbar"], header[data-testid="stHeader"] {
             display: none !important; height: 0 !important;
         }
@@ -33,18 +34,19 @@ st.markdown("""
         [data-testid="stSidebar"] .stRadio label:hover { background-color: #e9ecef !important; }
         [data-testid="stSidebar"] .stCaption { color: #868e96 !important; font-size: 0.75rem !important; text-align: center !important; }
 
-        /* [핵심 수정] 4번째 메뉴 항목(DIVIDER_LINE)을 완벽한 실선으로 변환 */
-        /* 동그란 버튼과 텍스트 모두 숨기고 선만 남깁니다 */
-        div[data-testid="stSidebar"] .stRadio [role="radiogroup"] > div:nth-child(4) {
+        /* [선 보정 핵심] 텍스트가 뭐든 상관없이 4번째 항목을 '진짜 실선'으로 강제 변환 */
+        div[data-testid="stSidebar"] .stRadio [role="radiogroup"] > div:nth-of-type(4) {
             border-top: 1px solid #dee2e6 !important;
             height: 0px !important;
-            margin: 1.0rem 0 !important;
+            margin: 1.2rem 0 !important; /* 위아래 st.markdown("---")과 똑같은 간격 */
             padding: 0 !important;
             pointer-events: none !important;
+            overflow: hidden !important;
         }
-        /* 4번째 항목 내부의 모든 요소(동그라미 버튼, 글자)를 제거 */
-        div[data-testid="stSidebar"] .stRadio [role="radiogroup"] > div:nth-child(4) * {
+        /* 4번째 항목 내부의 라디오 버튼과 글자를 완전히 소멸시킴 */
+        div[data-testid="stSidebar"] .stRadio [role="radiogroup"] > div:nth-of-type(4) * {
             display: none !important;
+            visibility: hidden !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -78,7 +80,7 @@ with st.sidebar:
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
         "리스크 키워드 확장",
-        "DIVIDER_LINE", 
+        "DIVIDER", # 텍스트를 짧게 변경 (어차피 CSS로 숨겨짐)
         "도메인 추출🚧",
         "단어 조합 생성기🚧"
     ]
