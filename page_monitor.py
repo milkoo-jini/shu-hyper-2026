@@ -213,7 +213,11 @@ class ShuMonitorEngine:
         for t in self.fixed_topics:
             try:
                 t_res = requests.get(f"https://openapi.naver.com/v1/search/news.json?query={urllib.parse.quote(t)}&display=25&sort=date", headers=h, timeout=5).json()
-                pool.extend(self._process_naver(t_res.get('items', []), f"🔥 {t} 이슈"))
+                items = t_res.get('items', [])
+                # 북중미 월드컵은 제목에 '월드컵' 포함된 기사만, 지방선거는 필터 없음
+                if t == "북중미 월드컵":
+                    items = [i for i in items if '월드컵' in BeautifulSoup(i.get('title', ''), 'html.parser').get_text()]
+                pool.extend(self._process_naver(items, f"🔥 {t} 이슈"))
             except:
                 pass
 
