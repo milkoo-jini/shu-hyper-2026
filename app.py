@@ -75,12 +75,12 @@ with st.sidebar:
     menu_main = st.radio("메뉴 선택", [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
-        "리스크 키워드 확장",
-        "도메인 추출🚧"
+        "리스크 키워드 확장"
     ], index=1, key="main_menu", on_change=reset_tool)
     
     st.markdown("---")
-    
+    menu_domain = st.radio("추출 도구", ["도메인 추출🚧"], 
+                           index=0, key="domain_menu", label_visibility="collapsed")
     menu_tool = st.radio("도구", ["단어 조합 생성기🚧"], 
                          index=None, key="tool_menu", on_change=reset_main, label_visibility="collapsed")
     
