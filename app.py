@@ -62,8 +62,10 @@ if 'admin_mode' not in st.session_state:
 
 def reset_tool(): 
     st.session_state.tool_menu = None
+    st.session_state.admin_mode = False  # 메뉴 이동 시 인증 해제
 def reset_main(): 
     st.session_state.main_menu = None
+    st.session_state.admin_mode = False  # 메뉴 이동 시 인증 해제
 
 # --- 사이드바 영역 ---
 with st.sidebar:
