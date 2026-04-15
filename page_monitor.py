@@ -216,7 +216,7 @@ class ShuMonitorEngine:
                 items = t_res.get('items', [])
                 # 북중미 월드컵은 제목에 '월드컵' 포함된 기사만, 지방선거는 필터 없음
                 if t == "북중미 월드컵":
-                    items = [i for i in items if '월드컵' in BeautifulSoup(i.get('title', ''), 'html.parser').get_text()]
+                    items = [i for i in items if '월드컵' in BeautifulSoup(i.get('title', ''), 'html.parser').get_text() or '북중미' in BeautifulSoup(i.get('title', ''), 'html.parser').get_text()]
                 pool.extend(self._process_naver(items, f"🔥 {t} 이슈"))
             except:
                 pass
