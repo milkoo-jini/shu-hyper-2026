@@ -97,7 +97,7 @@ def run_keyword():
         target_text = st.text_area(
             "키워드",
             height=340,
-            placeholder="정원오\n오월드늑대\n슈퍼주니어사고\n\n한 줄에 하나씩 입력하세요.",
+            placeholder="한 줄에 하나씩 입력하세요.",
             label_visibility="collapsed"
         )
 
