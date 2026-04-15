@@ -132,7 +132,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    menu_tool = st.radio("도구", ["단어 조합 생성기"], 
+    menu_tool = st.radio("도구", ["단어 조합 생성기🚧"], 
                          index=None, key="tool_menu", on_change=reset_main, label_visibility="collapsed")
     
     st.markdown("---")
