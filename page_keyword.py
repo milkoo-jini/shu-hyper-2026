@@ -72,7 +72,8 @@ def run_keyword():
         now = time.time()
         while request_times and now - request_times[0] >= 60:
             request_times.popleft()
-        if len(request_times) >= 28:
+        # ✅ 수정: 28 → 10으로 낮춰 429 오류 방지
+        if len(request_times) >= 10:
             wait_sec = 60 - (now - request_times[0])
             if wait_sec > 0:
                 for remaining in range(int(wait_sec), 0, -1):
@@ -206,8 +207,9 @@ def run_keyword():
 {seed}선거법위반
 {seed}여론조작의혹"""
 
+                    # ✅ 수정: gemini-2.5-flash → gemini-2.0-flash (403 오류 완화)
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-2.0-flash",
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             tools=[types.Tool(google_search=types.GoogleSearch())]
