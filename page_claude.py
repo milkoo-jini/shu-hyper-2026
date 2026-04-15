@@ -115,27 +115,7 @@ class MasterGuardian_Smart_Claude:
 
 
 def run_claude_collector():
-    st.markdown("""
-        <style>
-            [data-testid="stHeader"],
-            [data-testid="stDecoration"],
-            [data-testid="stToolbar"],
-            header[data-testid="stHeader"] {
-                display: none !important;
-                height: 0 !important;
-            }
-            .main .block-container {
-                padding-top: 2.5rem !important;
-                margin-top: 0 !important;
-                max-width: 95% !important;
-            }
-            .status-badge {
-                background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
-                padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold;
-                height: 2.8rem; line-height: 1.8rem;
-            }
-        </style>
-    """, unsafe_allow_html=True)
+    # CSS는 app.py에서 공통 적용
 
     if "is_collecting" not in st.session_state: st.session_state.is_collecting = False
 
@@ -162,7 +142,7 @@ def run_claude_collector():
             sel_titles = df_btn[df_btn['선택'] == True]['기사제목'].tolist()
             engine_temp = MasterGuardian_Smart_Claude()
             full_txt = engine_temp.make_claude_prompt("\n".join(sel_titles))
-            st.download_button("📄 클로드 분석용.txt 다운로드", full_txt.encode('utf-8'), "Claude_Task.txt", use_container_width=True)
+            st.download_button("📄 분석용.txt 다운로드", full_txt.encode('utf-8'), "Claude_Task.txt", use_container_width=True)
         else:
             st.button("📄 대기 중", disabled=True, use_container_width=True)
 
