@@ -97,7 +97,7 @@ def run_keyword():
         target_text = st.text_area(
             "키워드",
             height=340,
-            placeholder="정원오\n오월드늑대\n슈퍼주니어사고\n\n한 줄에 하나씩 입력하세요.",
+            placeholder="한 줄에 하나씩 입력하세요.",
             label_visibility="collapsed"
         )
 
@@ -209,7 +209,7 @@ def run_keyword():
 
                     # ✅ 수정: gemini-2.5-flash → gemini-2.0-flash (403 오류 완화)
                     response = client.models.generate_content(
-                        model="gemini-2.0-flash-lite",
+                        model="gemini-2.5-flash-preview-04-17",
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             tools=[types.Tool(google_search=types.GoogleSearch())]
