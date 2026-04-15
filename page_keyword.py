@@ -97,7 +97,7 @@ def run_keyword():
         target_text = st.text_area(
             "키워드",
             height=340,
-            placeholder="정원오\n오월드늑대\n슈퍼주니어사고\n\n한 줄에 하나씩 입력하세요.",
+            placeholder="한 줄에 하나씩 입력하세요.",
             label_visibility="collapsed"
         )
 
@@ -115,6 +115,7 @@ def run_keyword():
         else:
             st.caption("키워드를 입력해주세요.")
 
+        st.caption("⚠️ 실명 + 범죄성 단어 조합(음주운전, 전과 등)은 API 정책상 오류가 발생할 수 있습니다.")
         st.write("")
         analyze_clicked = st.button("🚀 리스크 분석 및 나열", use_container_width=True, type="primary")
 
