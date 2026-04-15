@@ -72,17 +72,27 @@ with st.sidebar:
     st.title("🚀 QA1 AI 업무 대시보드")
     st.markdown("---")
     
-    menu_main = st.radio("메뉴 선택", [
+# 1. 사이드바 메뉴 제목
+    st.sidebar.markdown("### 📋 메뉴 선택")
+
+    # 2. 모든 메뉴를 하나로 합치기 (그래야 하나만 선택됩니다)
+    # 중간에 '---'를 넣어 시각적으로 구분합니다.
+    menu_list = [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
-        "리스크 키워드 확장"
-    ], index=1, key="main_menu", on_change=reset_tool)
-    
-    st.markdown("---")
-    menu_domain = st.radio("추출 도구", ["도메인 추출🚧"], 
-                           index=0, key="domain_menu", label_visibility="collapsed")
-    menu_tool = st.radio("도구", ["단어 조합 생성기🚧"], 
-                         index=None, key="tool_menu", on_change=reset_main, label_visibility="collapsed")
+        "리스크 키워드 확장",
+        "────────────────", # 구분선 역할 (선택은 되지만 시각적 용도)
+        "도메인 추출🚧",
+        "단어 조합 생성기🚧"
+    ]
+
+    # 3. 라디오 버튼 하나로 통합
+    selected_menu = st.sidebar.radio(
+        "메뉴 선택", # 라벨이 보기 싫으면 label_visibility="collapsed" 추가
+        menu_list,
+        index=1, # 기본값: 실시간 이슈 모니터링
+        key="total_menu_radio"
+    )
     
     st.markdown("---")
 
