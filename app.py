@@ -32,7 +32,7 @@ st.markdown("""
             border-radius: 6px;
             padding: 0.5rem;
             text-align: center;
-            color: #1e3a8a;
+            color: #212529;
             font-weight: bold;
             height: 2.8rem;
             line-height: 1.8rem;
