@@ -145,50 +145,29 @@ class ShuMonitorEngine:
             return []
 
     def _dedup(self, pool):
-        def tokenize(text):
-            text = re.sub(r'[^\w\s]', ' ', text)
-            return set(w for w in text.split() if len(w) >= 2)
-
-        def extract_key_tokens(text):
-            text = re.sub(r'[^\w\s]', ' ', text)
-            tokens = text.split()
-            key = set()
-            for w in tokens:
-                if len(w) >= 3:
-                    key.add(w)
-                if re.search(r'[0-9]', w):
-                    key.add(w)
-            return key
-
-        def is_similar(tokens_a, tokens_b, threshold=0.8):
-            if not tokens_a or not tokens_b:
-                return False
-            intersection = tokens_a & tokens_b
-            smaller = min(len(tokens_a), len(tokens_b))
-            return len(intersection) / smaller >= threshold
-
-        def is_key_duplicate(key_a, key_b):
-            if not key_a or not key_b:
-                return False
-            return len(key_a & key_b) >= 2
+        def is_weighted_duplicate(title, seen_titles):
+            # 가중치 기반 중복 제거 — 3글자 이상 단어 2점, 2글자 단어 1점, 합산 4점 이상이면 중복
+            current_words = set(re.findall(r'[가-힣0-9%]{2,}', title))
+            for prev in seen_titles:
+                prev_words = set(re.findall(r'[가-힣0-9%]{2,}', prev))
+                score = sum(2 if len(w) >= 3 else 1 for w in (current_words & prev_words))
+                if score >= 4:
+                    return True
+            return False
 
         seen_exact = set()
-        seen_tokens = []
-        seen_keys = []
+        seen_titles = []
         unique_pool = []
         for item in pool:
+            # 1단계: 완전 일치 제거
             exact = re.sub(r'\s+', '', item['kw'])
             if exact in seen_exact:
                 continue
             seen_exact.add(exact)
-            key_tokens = extract_key_tokens(item['kw'])
-            if any(is_key_duplicate(key_tokens, prev) for prev in seen_keys):
+            # 2단계: 가중치 기반 중복 제거
+            if is_weighted_duplicate(item['kw'], seen_titles):
                 continue
-            seen_keys.append(key_tokens)
-            tokens = tokenize(item['kw'])
-            if any(is_similar(tokens, prev) for prev in seen_tokens):
-                continue
-            seen_tokens.append(tokens)
+            seen_titles.append(item['kw'])
             unique_pool.append(item)
         return unique_pool
 
