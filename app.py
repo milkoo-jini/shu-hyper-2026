@@ -128,8 +128,8 @@ with st.sidebar:
     menu_main = st.radio("메뉴 선택", [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
-        "도메인 추출🚧",
-        "리스크 키워드 확장"
+        "리스크 키워드 확장",
+        "도메인 추출🚧"
     ], index=1, key="main_menu", on_change=reset_tool)
     
     st.markdown("---")
