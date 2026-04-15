@@ -9,20 +9,8 @@ from collections import deque
 def run_keyword():
     st.markdown("<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True)
 
-    with st.sidebar:
-        st.markdown("### 🔐 관리자 인증")
-        password = st.text_input("접속 비밀번호", type="password", label_visibility="collapsed", placeholder="비밀번호 입력")
-        st.divider()
-        if st.button("⛔ 분석 중단", use_container_width=True):
-            st.session_state.stop_flag = True
-
     if "stop_flag" not in st.session_state:
         st.session_state.stop_flag = False
-
-    admin_pw = st.secrets.get("ADMIN_PASSWORD", "1234")
-    if password != admin_pw:
-        st.info("왼쪽 사이드바에 비밀번호를 입력해주세요.") if password == "" else st.error("비밀번호가 올바르지 않습니다.")
-        return
 
     def clean_line(line):
         line = re.sub(r'^[\d\.\-\*\#\s]+', '', line)
