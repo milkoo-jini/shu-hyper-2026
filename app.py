@@ -4,108 +4,53 @@ from page_keyword import run_keyword
 from page_claude import run_claude_collector  
 from page_combiner import run_combiner
 from page_scroll import run_domain_collector
+
 # 1. 페이지 설정
 st.set_page_config(layout="wide", page_title="Shu Risk Center", page_icon="🚨")
 
-# 2. 공통 CSS — 라이트모드 기준, 전체 페이지 통일
+# 2. 공통 CSS
 st.markdown("""
     <style>
-        /* 헤더·데코·툴바 숨기기 */
-        [data-testid="stHeader"],
-        [data-testid="stDecoration"],
-        [data-testid="stToolbar"],
-        header[data-testid="stHeader"] {
-            display: none !important;
-            height: 0 !important;
+        [data-testid="stHeader"], [data-testid="stDecoration"], [data-testid="stToolbar"], header[data-testid="stHeader"] {
+            display: none !important; height: 0 !important;
         }
-
-        /* 본문 여백 */
-        .main .block-container {
-            padding-top: 2rem !important;
-            margin-top: 0 !important;
-            max-width: 95% !important;
-        }
-
-        /* 공통 배지 */
+        .main .block-container { padding-top: 2rem !important; max-width: 95% !important; }
         .status-badge {
-            background-color: #ffffff;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            padding: 0.5rem;
-            text-align: center;
-            color: #212529;
-            font-weight: bold;
-            height: 2.8rem;
-            line-height: 1.8rem;
+            background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
+            padding: 0.5rem; text-align: center; color: #212529; font-weight: bold;
+            height: 2.8rem; line-height: 1.8rem;
         }
-
-        /* 사이드바 스타일 */
-        [data-testid="stSidebar"] {
-            background-color: #f8f9fa !important;
-        }
-        [data-testid="stSidebar"] .stRadio label {
-            font-size: 0.95rem !important;
-            color: #212529 !important;
-        }
-        [data-testid="stSidebar"] .stButton button {
-            border-radius: 6px !important;
-        }
-
-        /* 구분선 */
-        hr {
-            border-color: #dee2e6 !important;
-            margin: 0.8rem 0 !important;
-        }
-
-        /* 버튼 통일 */
-        .stButton button {
-            border-radius: 6px !important;
-            font-weight: 500 !important;
-        }
-
-        /* 텍스트 인풋 통일 */
-        .stTextInput input {
-            border-radius: 6px !important;
-        }
-
-        /* 데이터 에디터 헤더 */
-        .stDataFrame thead tr th {
-            background-color: #f1f3f5 !important;
-            color: #495057 !important;
-            font-weight: 600 !important;
-        }
-
-        /* 사이드바 타이틀 */
-        [data-testid="stSidebar"] h1 {
-            color: #212529 !important;
-            font-weight: 700 !important;
-        }
-
-        /* 라디오 버튼 스타일 */
-        [data-testid="stSidebar"] .stRadio > div {
-            gap: 0.3rem !important;
-        }
-        [data-testid="stSidebar"] .stRadio label {
-            padding: 0.4rem 0.6rem !important;
-            border-radius: 6px !important;
-            transition: background 0.2s !important;
-        }
-        [data-testid="stSidebar"] .stRadio label:hover {
-            background-color: #e9ecef !important;
-        }
-
-        /* 버전 표기 */
-        [data-testid="stSidebar"] .stCaption {
-            color: #868e96 !important;
-            font-size: 0.75rem !important;
-            text-align: center !important;
-        }
+        [data-testid="stSidebar"] { background-color: #f8f9fa !important; }
+        [data-testid="stSidebar"] .stRadio label { font-size: 0.95rem !important; color: #212529 !important; }
+        [data-testid="stSidebar"] .stButton button { border-radius: 6px !important; }
+        hr { border-color: #dee2e6 !important; margin: 0.8rem 0 !important; }
+        .stButton button { border-radius: 6px !important; font-weight: 500 !important; }
+        .stTextInput input { border-radius: 6px !important; }
+        .stDataFrame thead tr th { background-color: #f1f3f5 !important; color: #495057 !important; font-weight: 600 !important; }
+        [data-testid="stSidebar"] h1 { color: #212529 !important; font-weight: 700 !important; }
+        [data-testid="stSidebar"] .stRadio > div { gap: 0.3rem !important; }
+        [data-testid="stSidebar"] .stRadio label { padding: 0.4rem 0.6rem !important; border-radius: 6px !important; transition: background 0.2s !important; }
+        [data-testid="stSidebar"] .stRadio label:hover { background-color: #e9ecef !important; }
+        [data-testid="stSidebar"] .stCaption { color: #868e96 !important; font-size: 0.75rem !important; text-align: center !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 관리자 인증 로직 (엔터 입력 및 버튼 클릭 공용)
+# 3. 관리자 인증 로직 (수정됨: 요청하신 비번 매칭)
 def check_admin_pw():
-    if st.session_state.admin_pw_entry == st.secrets["COMBINER_PW"]:
+    menu = st.session_state.get("main_menu")
+    tool = st.session_state.get("tool_menu")
+    
+    # 리스크 키워드 확장 -> ADMIN_PASSWORD 사용
+    if menu == "리스크 키워드 확장":
+        target_pw = st.secrets["ADMIN_PASSWORD"]
+    # 도메인 추출, 단어 조합 생성기 -> COMBINER_PW 사용
+    elif menu == "도메인 추출🚧" or tool == "단어 조합 생성기🚧":
+        target_pw = st.secrets["COMBINER_PW"]
+    # 그 외 (기본값)
+    else:
+        target_pw = st.secrets["COMBINER_PW"]
+
+    if st.session_state.admin_pw_entry == target_pw:
         st.session_state.admin_mode = True
         st.session_state.admin_pw_entry = ""
     else:
@@ -139,7 +84,10 @@ with st.sidebar:
     
     st.markdown("---")
 
-    is_secure_selected = (menu_main == "도메인 추출🚧") or (menu_main == "리스크 키워드 확장") or (st.session_state.get("tool_menu") == "단어 조합 생성기🚧")
+    # 보안 대상 메뉴 설정
+    is_secure_selected = (menu_main == "도메인 추출🚧") or \
+                         (menu_main == "리스크 키워드 확장") or \
+                         (st.session_state.get("tool_menu") == "단어 조합 생성기🚧")
 
     if is_secure_selected:
         if not st.session_state.admin_mode:
@@ -161,7 +109,7 @@ with st.sidebar:
 # --- 본문 실행 영역 ---
 current_tool = st.session_state.get("tool_menu")
 
-if current_tool == "단어 조합 생성기":
+if current_tool == "단어 조합 생성기🚧":
     if st.session_state.admin_mode:
         run_combiner()
     else:
