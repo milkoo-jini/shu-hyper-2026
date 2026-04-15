@@ -115,7 +115,6 @@ def run_keyword():
         else:
             st.caption("키워드를 입력해주세요.")
 
-        st.caption("⚠️ 실명 + 범죄성 단어 조합(음주운전, 전과 등)은 API 정책상 오류가 발생할 수 있습니다.")
         st.write("")
         analyze_clicked = st.button("🚀 리스크 분석 및 나열", use_container_width=True, type="primary")
 
@@ -259,3 +258,4 @@ def run_keyword():
                 label_visibility="collapsed",
                 disabled=True
             )
+        st.caption("⚠️ 실명 + 범죄성 단어 조합(음주운전, 전과 등)은 API 정책상 오류가 발생할 수 있습니다.")
