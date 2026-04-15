@@ -8,39 +8,56 @@ from page_scroll import run_domain_collector
 # 1. 페이지 설정
 st.set_page_config(layout="wide", page_title="Shu Risk Center", page_icon="🚨")
 
-# 2. 공통 CSS (디자인 보강)
+# 2. 공통 CSS
 st.markdown("""
     <style>
         [data-testid="stHeader"], [data-testid="stDecoration"], [data-testid="stToolbar"], header[data-testid="stHeader"] {
             display: none !important; height: 0 !important;
         }
         .main .block-container { padding-top: 2rem !important; max-width: 95% !important; }
-        
-        /* 사이드바 라디오 버튼 간격 및 디자인 */
-        [data-testid="stSidebar"] .stRadio > div { gap: 2px !important; }
-        [data-testid="stSidebar"] .stRadio label {
-            padding: 8px 12px !important;
-            border-radius: 8px !important;
-            margin-bottom: 2px !important;
+        .status-badge {
+            background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
+            padding: 0.5rem; text-align: center; color: #212529; font-weight: bold;
+            height: 2.8rem; line-height: 1.8rem;
         }
-        
-        /* 구분선 스타일 커스텀 */
-        .sidebar-divider {
-            margin: 15px 0;
-            border-top: 1px solid #e0e0e0;
-            width: 100%;
-        }
-        
         [data-testid="stSidebar"] { background-color: #f8f9fa !important; }
-        [data-testid="stSidebar"] h1 { color: #212529 !important; font-weight: 700 !important; font-size: 1.5rem !important; }
+        [data-testid="stSidebar"] .stRadio label { font-size: 0.95rem !important; color: #212529 !important; }
+        [data-testid="stSidebar"] .stButton button { border-radius: 6px !important; }
+        hr { border-color: #dee2e6 !important; margin: 0.8rem 0 !important; }
+        .stButton button { border-radius: 6px !important; font-weight: 500 !important; }
+        .stTextInput input { border-radius: 6px !important; }
+        .stDataFrame thead tr th { background-color: #f1f3f5 !important; color: #495057 !important; font-weight: 600 !important; }
+        [data-testid="stSidebar"] h1 { color: #212529 !important; font-weight: 700 !important; }
+        [data-testid="stSidebar"] .stRadio > div { gap: 0.3rem !important; }
+        [data-testid="stSidebar"] .stRadio label { padding: 0.4rem 0.6rem !important; border-radius: 6px !important; transition: background 0.2s !important; }
+        [data-testid="stSidebar"] .stRadio label:hover { background-color: #e9ecef !important; }
+        [data-testid="stSidebar"] .stCaption { color: #868e96 !important; font-size: 0.75rem !important; text-align: center !important; }
+
+        /* [추가] 메뉴 사이 실선을 하단 실선과 똑같이 맞추는 디자인 */
+        div[data-testid="stSidebar"] label:nth-of-type(4) {
+            border-top: 1px solid #dee2e6 !important; 
+            height: 0px !important;
+            margin: 0.8rem 0 !important;
+            padding: 0 !important;
+            font-size: 0 !important;
+            color: transparent !important;
+            pointer-events: none !important;
+            display: block !important;
+        }
+        div[data-testid="stSidebar"] label:nth-of-type(4) div {
+            display: none !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 관리자 인증 로직
+# 3. 관리자 인증 로직 (기존 로직 유지)
 def check_admin_pw():
     current_selected = st.session_state.get("total_menu_radio")
+    
+    # 리스크 키워드 확장 -> ADMIN_PASSWORD 사용
     if current_selected == "리스크 키워드 확장":
         target_pw = st.secrets["ADMIN_PASSWORD"]
+    # 그 외 보안 메뉴 -> COMBINER_PW 사용
     else:
         target_pw = st.secrets["COMBINER_PW"]
 
@@ -50,50 +67,39 @@ def check_admin_pw():
     else:
         st.error("비밀번호 불일치")
 
+# 4. 상태 변수 초기화
 if 'admin_mode' not in st.session_state: 
     st.session_state.admin_mode = False
 
 # --- 사이드바 영역 ---
 with st.sidebar:
     st.title("🚀 QA1 AI 업무 대시보드")
-    st.write("") # 미세 여백
+    st.markdown("---")
     
-    # [수정] 메뉴 리스트에서 선 모양 텍스트 제거
+    st.markdown("### 📋 메뉴 선택")
+
+    # 통합 메뉴 리스트 (중간에 구분선용 텍스트 삽입)
     menu_list = [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
         "리스크 키워드 확장",
+        "DIVIDER_LINE", 
         "도메인 추출🚧",
         "단어 조합 생성기🚧"
     ]
 
-    # [핵심] 통합 라디오 버튼
-    # 메뉴를 쪼개지 않고 하나로 유지하여 '중복 선택' 원천 차단
-    menu_main = st.radio(
-        "📋 메뉴 선택",
+    # 통합 라디오 버튼 (중복 선택 방지 및 변수명 유지)
+    menu_main = st.sidebar.radio(
+        "메뉴 선택",
         menu_list,
         index=1,
-        key="total_menu_radio"
+        key="total_menu_radio",
+        label_visibility="collapsed"
     )
-    
-    # [수정] CSS를 이용해 3번 메뉴와 4번 메뉴 사이에 진짜 실선 긋기
-    # 파이썬 코드가 실행될 때 시각적으로만 구분선을 끼워넣습니다.
-    st.markdown("""
-        <script>
-            var labels = window.parent.document.querySelectorAll('label[data-baseweb="radio"]');
-            if (labels.length >= 5) {
-                // 3번째 메뉴(리스크 키워드 확장) 다음에 실선 추가
-                var divider = document.createElement('div');
-                divider.style.borderTop = '1px solid #ddd';
-                divider.style.margin = '10px 5px';
-                labels[2].parentElement.after(divider);
-            }
-        </script>
-    """, unsafe_allow_html=True)
     
     st.markdown("---")
 
-    # 보안 대상 메뉴 설정
+    # 보안 대상 메뉴 설정 (원본 로직 유지)
     is_secure_selected = menu_main in ["도메인 추출🚧", "리스크 키워드 확장", "단어 조합 생성기🚧"]
 
     if is_secure_selected:
@@ -113,16 +119,22 @@ with st.sidebar:
 
     st.caption("v2.1 Hybrid Engine (AI + Local)")
 
-# --- 본문 실행 영역 ---
+# --- 본문 실행 영역 (원본 로직 절대 유지) ---
 if menu_main == "단어 조합 생성기🚧":
-    if st.session_state.admin_mode: run_combiner()
-    else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
+    if st.session_state.admin_mode:
+        run_combiner()
+    else:
+        st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "리스크 키워드 확장":
-    if st.session_state.admin_mode: run_keyword()
-    else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
+    if st.session_state.admin_mode:
+        run_keyword()
+    else:
+        st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "도메인 추출🚧":
-    if st.session_state.admin_mode: run_domain_collector()
-    else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
+    if st.session_state.admin_mode:
+        run_domain_collector()
+    else:
+        st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "실시간 이슈 모니터링":
     run_monitor()
 elif menu_main == "클로드 분석용 언론 수집":
