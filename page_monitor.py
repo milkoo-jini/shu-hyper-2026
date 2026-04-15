@@ -334,27 +334,7 @@ def render_table(df, editor_key):
 # UI
 # ----------------------------------------------------------------
 def run_monitor():
-    st.markdown("""
-        <style>
-            [data-testid="stHeader"],
-            [data-testid="stDecoration"],
-            [data-testid="stToolbar"],
-            header[data-testid="stHeader"] {
-                display: none !important;
-                height: 0 !important;
-            }
-            .main .block-container {
-                padding-top: 2.5rem !important;
-                margin-top: 0 !important;
-                max-width: 95% !important;
-            }
-            .status-badge {
-                background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 6px;
-                padding: 0.5rem; text-align: center; color: #1e3a8a; font-weight: bold;
-                height: 2.8rem; line-height: 1.8rem;
-            }
-        </style>
-    """, unsafe_allow_html=True)
+    # CSS는 app.py에서 공통 적용
 
     # session_state 초기화
     if 'data_pool'    not in st.session_state: st.session_state.data_pool    = []
