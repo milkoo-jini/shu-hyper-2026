@@ -33,31 +33,27 @@ st.markdown("""
         [data-testid="stSidebar"] .stRadio label:hover { background-color: #e9ecef !important; }
         [data-testid="stSidebar"] .stCaption { color: #868e96 !important; font-size: 0.75rem !important; text-align: center !important; }
 
-        /* [추가] 메뉴 사이 실선을 하단 실선과 똑같이 맞추는 디자인 */
-        div[data-testid="stSidebar"] label:nth-of-type(4) {
-            border-top: 1px solid #dee2e6 !important; 
+        /* [핵심 수정] 4번째 메뉴 항목(DIVIDER_LINE)을 완벽한 실선으로 변환 */
+        /* 동그란 버튼과 텍스트 모두 숨기고 선만 남깁니다 */
+        div[data-testid="stSidebar"] .stRadio [role="radiogroup"] > div:nth-child(4) {
+            border-top: 1px solid #dee2e6 !important;
             height: 0px !important;
-            margin: 0.8rem 0 !important;
+            margin: 1.0rem 0 !important;
             padding: 0 !important;
-            font-size: 0 !important;
-            color: transparent !important;
             pointer-events: none !important;
-            display: block !important;
         }
-        div[data-testid="stSidebar"] label:nth-of-type(4) div {
+        /* 4번째 항목 내부의 모든 요소(동그라미 버튼, 글자)를 제거 */
+        div[data-testid="stSidebar"] .stRadio [role="radiogroup"] > div:nth-child(4) * {
             display: none !important;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 관리자 인증 로직 (기존 로직 유지)
+# 3. 관리자 인증 로직 (원본 유지)
 def check_admin_pw():
     current_selected = st.session_state.get("total_menu_radio")
-    
-    # 리스크 키워드 확장 -> ADMIN_PASSWORD 사용
     if current_selected == "리스크 키워드 확장":
         target_pw = st.secrets["ADMIN_PASSWORD"]
-    # 그 외 보안 메뉴 -> COMBINER_PW 사용
     else:
         target_pw = st.secrets["COMBINER_PW"]
 
@@ -78,7 +74,6 @@ with st.sidebar:
     
     st.markdown("### 📋 메뉴 선택")
 
-    # 통합 메뉴 리스트 (중간에 구분선용 텍스트 삽입)
     menu_list = [
         "클로드 분석용 언론 수집",
         "실시간 이슈 모니터링", 
@@ -88,7 +83,6 @@ with st.sidebar:
         "단어 조합 생성기🚧"
     ]
 
-    # 통합 라디오 버튼 (중복 선택 방지 및 변수명 유지)
     menu_main = st.sidebar.radio(
         "메뉴 선택",
         menu_list,
@@ -99,7 +93,6 @@ with st.sidebar:
     
     st.markdown("---")
 
-    # 보안 대상 메뉴 설정 (원본 로직 유지)
     is_secure_selected = menu_main in ["도메인 추출🚧", "리스크 키워드 확장", "단어 조합 생성기🚧"]
 
     if is_secure_selected:
@@ -119,22 +112,16 @@ with st.sidebar:
 
     st.caption("v2.1 Hybrid Engine (AI + Local)")
 
-# --- 본문 실행 영역 (원본 로직 절대 유지) ---
+# --- 본문 실행 영역 (원본 유지) ---
 if menu_main == "단어 조합 생성기🚧":
-    if st.session_state.admin_mode:
-        run_combiner()
-    else:
-        st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
+    if st.session_state.admin_mode: run_combiner()
+    else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "리스크 키워드 확장":
-    if st.session_state.admin_mode:
-        run_keyword()
-    else:
-        st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
+    if st.session_state.admin_mode: run_keyword()
+    else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "도메인 추출🚧":
-    if st.session_state.admin_mode:
-        run_domain_collector()
-    else:
-        st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
+    if st.session_state.admin_mode: run_domain_collector()
+    else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "실시간 이슈 모니터링":
     run_monitor()
 elif menu_main == "클로드 분석용 언론 수집":
