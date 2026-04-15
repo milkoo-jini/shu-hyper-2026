@@ -7,7 +7,7 @@ from google.genai import types
 from collections import deque
 
 def run_keyword():
-    st.markdown("<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True)
+    # CSS는 app.py에서 공통 적용
 
     if "stop_flag" not in st.session_state:
         st.session_state.stop_flag = False
@@ -85,7 +85,7 @@ def run_keyword():
         target_text = st.text_area(
             "키워드",
             height=340,
-            placeholder="한 줄에 하나씩 입력하세요.",
+            placeholder="정원오\n오월드늑대\n슈퍼주니어사고\n\n한 줄에 하나씩 입력하세요.",
             label_visibility="collapsed"
         )
 
