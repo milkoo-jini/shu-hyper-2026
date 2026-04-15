@@ -28,7 +28,7 @@ def reset_main():
 
 # --- 사이드바 영역 ---
 with st.sidebar:
-    st.title("🚀 QA1 업무 대시보드")
+    st.title("🚀 QA1 AI 업무 대시보드")
     st.markdown("---")
     
     # 메인 메뉴 (라디오)
