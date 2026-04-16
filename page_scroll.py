@@ -267,14 +267,22 @@ def _parse_blog_timestamp(ts_str: str) -> datetime | None:
 
 
 def _fetch_blog_post_text(blog_id: str, log_no: str, headers: dict, debug: bool = False) -> str:
-    """블로그 본문 HTML에서 텍스트 추출 (도메인 탐지용)"""
+    """블로그 본문에서 사용자에게 보이는 텍스트와 링크만 추출"""
     try:
+        from bs4 import BeautifulSoup
         url = f"https://blog.naver.com/PostView.naver?blogId={blog_id}&logNo={log_no}&redirect=Dlog"
         res = requests.get(url, headers=headers, timeout=10)
         if debug:
             st.code(f"본문 HTTP {res.status_code} | {len(res.text):,} bytes\n{res.text[:500]}")
-        text = re.sub(r'<[^>]+>', ' ', res.text)
-        return text
+        soup = BeautifulSoup(res.text, 'html.parser')
+        # script, style 제거
+        for tag in soup(['script', 'style', 'meta', 'link', 'head']):
+            tag.decompose()
+        # 눈에 보이는 텍스트 + href 링크만 추출
+        texts = [soup.get_text(separator=' ')]
+        for a in soup.find_all('a', href=True):
+            texts.append(a['href'])
+        return ' '.join(texts)
     except Exception as e:
         if debug:
             st.error(f"본문 fetch 오류: {e}")
