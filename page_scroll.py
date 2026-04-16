@@ -258,15 +258,18 @@ def _parse_blog_timestamp(ts_str: str) -> datetime | None:
 
 
 
-def _fetch_blog_post_text(blog_id: str, log_no: str, headers: dict) -> str:
+def _fetch_blog_post_text(blog_id: str, log_no: str, headers: dict, debug: bool = False) -> str:
     """블로그 본문 HTML에서 텍스트 추출 (도메인 탐지용)"""
     try:
         url = f"https://blog.naver.com/PostView.naver?blogId={blog_id}&logNo={log_no}&redirect=Dlog"
         res = requests.get(url, headers=headers, timeout=10)
-        # HTML 태그 제거하고 텍스트만 반환
+        if debug:
+            st.code(f"본문 HTTP {res.status_code} | {len(res.text):,} bytes\n{res.text[:500]}")
         text = re.sub(r'<[^>]+>', ' ', res.text)
         return text
-    except Exception:
+    except Exception as e:
+        if debug:
+            st.error(f"본문 fetch 오류: {e}")
         return ""
 
 
@@ -363,7 +366,7 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 title_nospace = title.replace(' ', '')
                 full_text = title + " " + title_nospace + " " + summary
                 if log_no:
-                    body_text = _fetch_blog_post_text(BLOG_ID, log_no, headers)
+                    body_text = _fetch_blog_post_text(BLOG_ID, log_no, headers, debug=debug_mode and page == 1 and idx == 0)
                     if debug_mode and page == 1 and idx == 0:
                         st.code(f"본문 앞 500자:\n{body_text[:500]}")
                     full_text += " " + body_text
