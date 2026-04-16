@@ -105,17 +105,9 @@ def run_domain_collector():
     # ── 버튼 영역 ────────────────────────────────────────────────
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        run_btn = st.button(
-            "🚀 도메인 수집 시작",
-            use_container_width=True,
-            type="primary"
-        )
+        run_btn = st.button("🚀 도메인 수집 시작", use_container_width=True, type="primary")
     with col_btn2:
-        stop_btn = st.button(
-            "⏹ 수집 중단",
-            use_container_width=True,
-            type="secondary"
-        )
+        stop_btn = st.button("⏹ 수집 중단", use_container_width=True, type="secondary")
 
     if stop_btn:
         st.session_state.domain_stop = True
@@ -139,18 +131,18 @@ def run_domain_collector():
     st.session_state.domain_running = True
     st.session_state.domain_stop = False
 
-    # ── 헤더 ─────────────────────────────────────────────────────
-    headers = {
+    # ── 공통 헤더 ────────────────────────────────────────────────
+    base_headers = {
         'User-Agent': (
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
             'AppleWebKit/537.36 (KHTML, like Gecko) '
             'Chrome/124.0.0.0 Safari/537.36'
         ),
         'Cookie': cookie_value,
-        'Referer': 'https://cafe.naver.com/notouch7',
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'ko-KR,ko;q=0.9',
         'Origin': 'https://cafe.naver.com',
+        'x-cafe-product': 'pc',
     }
 
     cutoff_time = datetime.now(KST) - timedelta(hours=hours_limit)
@@ -168,14 +160,19 @@ def run_domain_collector():
             break
 
         page_status.caption(f"페이지 {page} 불러오는 중...")
+
         list_url = (
             f"https://apis.naver.com/cafe-web/cafe-boardlist-api/v1"
             f"/cafes/25470135/menus/0/articles"
             f"?page={page}&pageSize={page_size}&sortBy=TIME&viewType=L"
         )
+        list_headers = {
+            **base_headers,
+            'Referer': 'https://cafe.naver.com/ca-fe/cafes/25470135/articles',
+        }
 
         try:
-            res = requests.get(list_url, headers=headers, timeout=10)
+            res = requests.get(list_url, headers=list_headers, timeout=10)
 
             if debug_mode and page == 1:
                 st.markdown("#### 🛠 디버그 정보")
@@ -184,7 +181,7 @@ def run_domain_collector():
                     st.markdown(f"<div class='status-badge'>HTTP 상태: {res.status_code}</div>", unsafe_allow_html=True)
                 with col_d2:
                     st.markdown(f"<div class='status-badge'>응답 크기: {len(res.text):,} bytes</div>", unsafe_allow_html=True)
-                with st.expander("원본 응답 (앞 1000자)"):
+                with st.expander("목록 원본 응답 (앞 1000자)"):
                     st.code(res.text[:1000])
 
             data = res.json()
@@ -275,13 +272,22 @@ def run_domain_collector():
 
         status_text.caption(f"본문 분석 중... ({i+1}/{len(filtered)}) {title[:30]}...")
 
+        # 본문 API - referer를 해당 글 URL로 동적 설정
         content_url = (
             f"https://article.cafe.naver.com/gw/v4"
             f"/cafes/25470135/articles/{article_id}"
-            f"?query=?query=&boardType=L&useCafeId=true&requestFrom=AuseCafeId=true?query=&boardType=L&useCafeId=true&requestFrom=ArequestFrom=A"
+            f"?query=&useCafeId=true&requestFrom=A"
         )
+        content_headers = {
+            **base_headers,
+            'Referer': (
+                f"https://cafe.naver.com/ca-fe/cafes/25470135/articles/{article_id}"
+                f"?referrerAllArticles=true&fromNext=true"
+            ),
+        }
+
         try:
-            content_res = requests.get(content_url, headers=headers, timeout=10)
+            content_res = requests.get(content_url, headers=content_headers, timeout=10)
 
             try:
                 content_data = content_res.json()
@@ -320,7 +326,7 @@ def run_domain_collector():
                     "도메인": d,
                     "작성시간": time_str,
                     "글제목": title,
-                    "링크": f"https://cafe.naver.com/notouch7/{article_id}"
+                    "링크": f"https://cafe.naver.com/f-e/cafes/25470135/articles/{article_id}"
                 })
         except Exception:
             pass
