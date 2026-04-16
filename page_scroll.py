@@ -235,6 +235,11 @@ def _parse_blog_timestamp(ts_str: str) -> datetime | None:
     if m:
         return datetime.now(KST) - timedelta(minutes=int(m.group(1)))
 
+    # "N일 전" 처리
+    m = re.match(r'(\d+)일\s*전', s)
+    if m:
+        return datetime.now(KST) - timedelta(days=int(m.group(1)))
+
     # "방금 전" 처리
     if '방금' in s:
         return datetime.now(KST)
@@ -242,8 +247,11 @@ def _parse_blog_timestamp(ts_str: str) -> datetime | None:
     formats = [
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y. %m. %d. %H:%M",
+        "%Y. %m. %d.",
         "%Y.%m.%d.",
+        "%Y.%m.%d",
         "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
         "%Y%m%d",
     ]
     for fmt in formats:
@@ -461,7 +469,6 @@ def run_domain_collector():
                 f"최근 {x // 24}일" if x < 720 else "최근 30일"
             )
         )
-        page_size = st.selectbox("카페 페이지당 글 수", [15, 30, 50], index=1)
         debug_mode = st.checkbox("디버그 모드", value=False)
 
     st.markdown("---")
@@ -512,7 +519,7 @@ def run_domain_collector():
 
     # 카페 수집
     cafe_results = collect_cafe(
-        cookie_value, hours_limit, page_size,
+        cookie_value, hours_limit, 30,
         debug_mode, cafe_status, stop_flag
     )
     cafe_status.caption(f"✅ 카페 수집 완료 ({len(cafe_results)}건)")
