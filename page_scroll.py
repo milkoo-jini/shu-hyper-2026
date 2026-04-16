@@ -5,6 +5,7 @@ import json
 import pandas as pd
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote_plus
 import time
 
 
@@ -67,6 +68,16 @@ def parse_cookie(raw: str) -> str:
     except (json.JSONDecodeError, TypeError):
         pass
     return raw
+
+
+def fix_spaced_domain(text: str) -> str:
+    """'bl8w0c .v1asset .com' 처럼 공백으로 쪼개진 도메인을 복원"""
+    prev = None
+    while prev != text:
+        prev = text
+        text = re.sub(r'([a-zA-Z0-9\-]+)\s+\.(com|net|org|io|kr|shop|site|online|store|info|biz|xyz|top|club)\b', r'\1.\2', text)
+        text = re.sub(r'([a-zA-Z0-9\-]+)\s+\.([a-zA-Z0-9\-]+)', r'\1.\2', text)
+    return text
 
 
 def extract_domains_from_text(text: str) -> list:
@@ -230,22 +241,18 @@ def _parse_blog_timestamp(ts_str: str) -> datetime | None:
         return None
     s = ts_str.strip()
 
-    # "N시간 전" 처리
     m = re.match(r'(\d+)시간\s*전', s)
     if m:
         return datetime.now(KST) - timedelta(hours=int(m.group(1)))
 
-    # "N분 전" 처리
     m = re.match(r'(\d+)분\s*전', s)
     if m:
         return datetime.now(KST) - timedelta(minutes=int(m.group(1)))
 
-    # "N일 전" 처리
     m = re.match(r'(\d+)일\s*전', s)
     if m:
         return datetime.now(KST) - timedelta(days=int(m.group(1)))
 
-    # "방금 전" 처리
     if '방금' in s:
         return datetime.now(KST)
 
@@ -270,27 +277,20 @@ def _parse_blog_timestamp(ts_str: str) -> datetime | None:
     return None
 
 
-
-def _fetch_blog_post_text(blog_id: str, log_no: str, headers: dict, debug: bool = False) -> str:
+def _fetch_blog_post_text(blog_id: str, log_no: str, headers: dict) -> str:
     """블로그 본문에서 사용자에게 보이는 텍스트와 링크만 추출"""
     try:
         from bs4 import BeautifulSoup
         url = f"https://blog.naver.com/PostView.naver?blogId={blog_id}&logNo={log_no}&redirect=Dlog"
         res = requests.get(url, headers=headers, timeout=10)
-        if debug:
-            st.code(f"본문 HTTP {res.status_code} | {len(res.text):,} bytes\n{res.text[:500]}")
         soup = BeautifulSoup(res.text, 'html.parser')
-        # script, style 제거
         for tag in soup(['script', 'style', 'meta', 'link', 'head']):
             tag.decompose()
-        # 눈에 보이는 텍스트 + href 링크만 추출
         texts = [soup.get_text(separator=' ')]
         for a in soup.find_all('a', href=True):
             texts.append(a['href'])
         return ' '.join(texts)
-    except Exception as e:
-        if debug:
-            st.error(f"본문 fetch 오류: {e}")
+    except Exception:
         return ""
 
 
@@ -321,7 +321,6 @@ def collect_blog(cookie_value: str, hours_limit: int,
 
         status_placeholder.caption(f"📝 블로그 페이지 {page} 수집 중...")
 
-        # 블로그 포스트 목록 API (JSON 반환 엔드포인트)
         list_url = (
             f"https://blog.naver.com/PostTitleListAsync.naver"
             f"?blogId={BLOG_ID}&currentPage={page}&countPerPage=30"
@@ -335,20 +334,16 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 st.markdown("**🛠 블로그 디버그**")
                 st.code(f"HTTP {res.status_code} | {len(res.text):,} bytes\n{res.text[:2000]}")
 
-            # JSON 응답 파싱 (Invalid \escape 처리)
             try:
                 data = res.json()
             except Exception:
                 try:
                     cleaned = res.text.replace('\\', '\\\\')
                     data = json.loads(cleaned)
-                except Exception as je:
-                    if debug_mode:
-                        st.error(f"JSON 파싱 실패: {je}")
+                except Exception:
                     stop = True
                     break
 
-            # 포스트 목록 추출 (네이버 블로그 PostList API 구조)
             posts = None
             for key_path in [
                 ['postList'],
@@ -366,27 +361,15 @@ def collect_blog(cookie_value: str, hours_limit: int,
                     continue
 
             if not posts:
-                if debug_mode:
-                    st.error(f"posts 없음. data keys: {list(data.keys())} | postList: {str(data.get('postList'))[:200]}")
                 stop = True
                 break
 
-            if debug_mode and page == 1:
-                first = posts[0]
-                ad = first.get('addDate') or ''
-                pt = _parse_blog_timestamp(str(ad))
-                ct = datetime.now(KST) - timedelta(hours=hours_limit)
-                st.code(f"posts 개수: {len(posts)}\n첫 포스트 addDate: {ad!r}\n파싱결과: {pt}\ncutoff: {ct}")
-
-            for idx, post in enumerate(posts):
-                from urllib.parse import unquote_plus
+            for post in posts:
                 log_no = str(post.get('logNo') or post.get('no') or '')
-                raw_title = post.get('title') or post.get('subject') or f"글_{log_no}"
-                title = unquote_plus(raw_title)
+                title = unquote_plus(post.get('title') or post.get('subject') or f"글_{log_no}")
                 add_date = post.get('addDate') or post.get('writeDate') or post.get('regDate') or ''
                 summary = unquote_plus(post.get('summary') or post.get('content') or '')
 
-                # 날짜 파싱
                 post_time = _parse_blog_timestamp(str(add_date))
                 if post_time and post_time < cutoff_time:
                     stop = True
@@ -395,24 +378,11 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 time_str = post_time.strftime('%Y-%m-%d %H:%M') if post_time else "-"
                 post_url = f"https://blog.naver.com/{BLOG_ID}/{log_no}"
 
-                # 제목 + 요약 + 본문에서 도메인 추출
-                # "bl8w0c .v1asset .com" 처럼 공백 있는 도메인 복원
-                def fix_spaced_domain(text):
-                    # 반복 적용해서 bl8w0c .v1asset .com → bl8w0c.v1asset.com
-                    prev = None
-                    while prev != text:
-                        prev = text
-                        text = re.sub(r'([a-zA-Z0-9\-]+)\s+\.(com|net|org|io|kr|shop|site|online|store|info|biz|xyz|top|club)\b', r'\1.\2', text)
-                        text = re.sub(r'([a-zA-Z0-9\-]+)\s+\.([a-zA-Z0-9\-]+)', r'\1.\2', text)
-                    return text
                 title_fixed = fix_spaced_domain(title)
                 summary_fixed = fix_spaced_domain(summary)
                 full_text = title + " " + title_fixed + " " + summary + " " + summary_fixed
                 if log_no:
-                    body_text = _fetch_blog_post_text(BLOG_ID, log_no, headers, debug=debug_mode and page == 1 and idx == 0)
-                    if debug_mode and page == 1 and idx == 0:
-                        st.code(f"본문 앞 500자:\n{body_text[:500]}")
-                    full_text += " " + body_text
+                    full_text += " " + _fetch_blog_post_text(BLOG_ID, log_no, headers)
                 domains = extract_domains_from_text(full_text)
 
                 for d in domains:
@@ -440,13 +410,11 @@ def collect_blog(cookie_value: str, hours_limit: int,
 # ─────────────────────────────────────────────────────────────
 def run_domain_collector():
 
-    # 세션 상태 초기화
     if 'domain_running' not in st.session_state:
         st.session_state.domain_running = False
     if 'domain_stop' not in st.session_state:
         st.session_state.domain_stop = False
 
-    # 쿠키 로드
     try:
         raw_cookie = st.secrets["NAVER_COOKIE"]
     except KeyError:
@@ -460,7 +428,6 @@ def run_domain_collector():
 
     cookie_value = parse_cookie(raw_cookie)
 
-    # 타이틀
     st.markdown("## 🔎 사기 의심 도메인 수집")
     st.markdown(
         "<p style='color:#868e96; margin-top:-0.5rem;'>"
@@ -470,7 +437,6 @@ def run_domain_collector():
     )
     st.markdown("---")
 
-    # 설정
     col_l, col_r = st.columns([3, 1])
     with col_l:
         st.markdown("#### 📋 수집 안내")
@@ -495,7 +461,6 @@ def run_domain_collector():
 
     st.markdown("---")
 
-    # 버튼 영역
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         run_btn = st.button(
@@ -524,7 +489,6 @@ def run_domain_collector():
                 """)
         return
 
-    # 수집 시작
     st.session_state.domain_running = True
     st.session_state.domain_stop = False
 
@@ -535,31 +499,22 @@ def run_domain_collector():
 
     cafe_status = st.empty()
     cafe_status.caption("📋 카페 수집 준비 중...")
-
-    cafe_results = []
-    blog_results = []
-
-    # 카페 수집
     cafe_results = collect_cafe(
         cookie_value, hours_limit, 30,
         debug_mode, cafe_status, stop_flag
     )
     cafe_status.caption(f"✅ 카페 수집 완료 ({len(cafe_results)}건)")
 
-    # 블로그 수집
     blog_status = st.empty()
-    blog_debug = st.container()  # 디버그 출력용 고정 영역
     blog_status.caption("📝 블로그 수집 준비 중...")
-    with blog_debug:
-        blog_results = collect_blog(
-            cookie_value, hours_limit,
-            debug_mode, blog_status, stop_flag
-        )
+    blog_results = collect_blog(
+        cookie_value, hours_limit,
+        debug_mode, blog_status, stop_flag
+    )
     blog_status.caption(f"✅ 블로그 수집 완료 ({len(blog_results)}건)")
 
     st.session_state.domain_running = False
 
-    # 결과 출력
     st.markdown("---")
 
     all_results = cafe_results + blog_results
