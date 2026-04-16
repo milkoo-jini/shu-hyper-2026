@@ -83,7 +83,7 @@ with st.sidebar:
 
     menu_tool = st.radio(
         "도구",
-        ["도메인 추출🚧", "단어 조합 생성기🚧"],
+        ["사기 의심 도메인 수집🚧", "단어 조합 생성기🚧"],
         index=None,
         key="tool_menu",
         label_visibility="collapsed",
@@ -93,7 +93,7 @@ with st.sidebar:
     st.markdown("---")
 
     menu_selected = st.session_state.get("tool_menu") or menu_main
-    is_secure_selected = menu_selected in ["도메인 추출🚧", "리스크 키워드 확장", "단어 조합 생성기🚧"]
+    is_secure_selected = menu_selected in ["사기 의심 도메인 수집🚧", "리스크 키워드 확장", "단어 조합 생성기🚧"]
 
     if is_secure_selected:
         if not st.session_state.admin_mode:
@@ -118,7 +118,7 @@ current_tool = st.session_state.get("tool_menu")
 if current_tool == "단어 조합 생성기🚧":
     if st.session_state.admin_mode: run_combiner()
     else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
-elif current_tool == "도메인 추출🚧":
+elif current_tool == "사기 의심 도메인 수집🚧":
     if st.session_state.admin_mode: run_domain_collector()
     else: st.info("👈 사이드바에서 관리자 인증을 진행해 주세요.")
 elif menu_main == "리스크 키워드 확장":
