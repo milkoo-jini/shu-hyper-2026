@@ -347,10 +347,10 @@ def collect_blog(cookie_value: str, hours_limit: int,
 
             if debug_mode and page == 1:
                 first = posts[0]
-                ad = first.get('addDate') or first.get('writeDate') or ''
+                ad = first.get('addDate') or ''
                 pt = _parse_blog_timestamp(str(ad))
                 ct = datetime.now(KST) - timedelta(hours=hours_limit)
-                st.code(f"첫 포스트 addDate: {ad!r} → 파싱결과: {pt} | cutoff: {ct}")
+                st.code(f"posts 개수: {len(posts)}\n첫 포스트 addDate: {ad!r}\n파싱결과: {pt}\ncutoff: {ct}")
 
             for idx, post in enumerate(posts):
                 from urllib.parse import unquote_plus
