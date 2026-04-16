@@ -275,8 +275,8 @@ def run_domain_collector():
         # 본문 API - referer를 해당 글 URL로 동적 설정
         content_url = (
             f"https://article.cafe.naver.com/gw/v4"
-            f"/cafes/25470135/articles/{article_id}"
-            f"?query=&useCafeId=true&requestFrom=A"
+            f"/cafes/notouch7/articles/{article_id}"
+            f"?query=&requestFrom=A"
         )
         content_headers = {
             **base_headers,
