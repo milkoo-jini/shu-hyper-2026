@@ -10,6 +10,27 @@ import time
 KST = timezone(timedelta(hours=9))
 MAX_PAGES = 20
 
+# 명백한 정상 도메인 제외 (서브도메인 포함, 피싱 도메인은 제외 안 됨)
+EXCLUDE_DOMAINS = {
+    'naver.com', 'cafe.naver.com', 'blog.naver.com', 'search.naver.com',
+    'map.naver.com', 'shopping.naver.com', 'news.naver.com', 'pstatic.net',
+    'naverusercontent.com',
+    'daum.net', 'daumcdn.net',
+    'kakao.com', 'kakaocorp.com', 'kakaocdn.net',
+    'google.com', 'google.co.kr', 'googleapis.com', 'gstatic.com',
+    'youtube.com', 'youtu.be',
+    'band.us',
+    'instagram.com', 'facebook.com', 'fb.com',
+    'twitter.com', 'x.com',
+    'tiktok.com',
+    'wikipedia.org', 'namu.wiki',
+}
+
+
+def is_excluded(domain: str) -> bool:
+    d = domain.lower()
+    return any(d == ex or d.endswith('.' + ex) for ex in EXCLUDE_DOMAINS)
+
 # http/https URL 패턴
 URL_PATTERN = re.compile(
     r'https?://([a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?'
@@ -37,12 +58,14 @@ def parse_cookie(raw: str) -> str:
 
 
 def extract_domains_from_text(text: str) -> list:
-    """http/https URL + 텍스트 도메인 모두 추출"""
+    """http/https URL + 텍스트 도메인 모두 추출 (명백한 정상 도메인 제외)"""
     found = set()
     for d in URL_PATTERN.findall(text):
-        found.add(d.lower())
+        if not is_excluded(d.lower()):
+            found.add(d.lower())
     for d in PLAIN_DOMAIN_PATTERN.findall(text):
-        found.add(d.lower())
+        if not is_excluded(d.lower()):
+            found.add(d.lower())
     return list(found)
 
 
@@ -93,9 +116,9 @@ def run_domain_collector():
         st.markdown("#### ⚙️ 수집 설정")
         hours_limit = st.selectbox(
             "수집 범위",
-            [6, 12, 24],
+            [6, 12, 24, 48, 72, 168],
             index=1,
-            format_func=lambda x: f"최근 {x}시간"
+            format_func=lambda x: f"최근 {x}시간" if x < 48 else (f"최근 {x//24}일" if x < 168 else "최근 1주일")
         )
         page_size = st.selectbox("페이지당 글 수", [15, 30, 50], index=1)
         debug_mode = st.checkbox("디버그 모드", value=False)
