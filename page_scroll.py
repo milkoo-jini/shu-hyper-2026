@@ -51,13 +51,26 @@ def parse_cookie(raw: str) -> str:
 
 
 def extract_domains_from_text(text: str) -> list:
+    # 1. URL과 도메인을 모두 잡는 더 넓은 범위의 패턴 (http가 없어도 추출 가능)
     url_pattern = re.compile(
-        r'https?://([a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?'
-        r'(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*'
-        r'\.[a-zA-Z]{2,})'
+        r'(?:https?://)?(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?::\d+)?(?:/[^\s<>"\']*)?'
     )
+    
     found = url_pattern.findall(text)
-    return [d for d in set(found) if not is_excluded(d)]
+    
+    cleaned_results = []
+    if found:
+        for f in set(found):
+            # URL 끝에 붙은 불필요한 기호(마침표, 괄호 등) 정리
+            clean_url = f.strip('.,;)"\'')
+            
+            # 도메인 부분만 따로 떼어내서 제외 리스트와 비교
+            domain_part = clean_url.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
+            
+            if not is_excluded(domain_part):
+                cleaned_results.append(clean_url)
+                
+    return cleaned_results
 
 
 def run_domain_collector():
