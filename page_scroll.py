@@ -391,9 +391,12 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 post_url = f"https://blog.naver.com/{BLOG_ID}/{log_no}"
 
                 # 제목 + 요약 + 본문에서 도메인 추출
-                # title의 공백 제거 버전도 포함 (예: "bit-ment .com" → "bit-ment.com")
-                title_nospace = title.replace(' ', '')
-                full_text = title + " " + title_nospace + " " + summary
+                # "bit-ment .com" 처럼 TLD 앞 공백 제거해서 도메인 복원
+                def fix_spaced_domain(text):
+                    return re.sub(r'([a-zA-Z0-9\-]+)\s+\.(com|net|org|io|kr|shop|site|online|store|info|biz|xyz|top|club)\b', r'\1.\2', text)
+                title_fixed = fix_spaced_domain(title)
+                summary_fixed = fix_spaced_domain(summary)
+                full_text = title + " " + title_fixed + " " + summary + " " + summary_fixed
                 if log_no:
                     body_text = _fetch_blog_post_text(BLOG_ID, log_no, headers, debug=debug_mode and page == 1 and idx == 0)
                     if debug_mode and page == 1 and idx == 0:
