@@ -7,9 +7,21 @@ from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import time
 
-# 정확한 도메인 일치 방식 (서브도메인 포함)
-def is_excluded(domain: str) -> bool:
-    return False  # 모든 도메인을 통과시킴
+KST = timezone(timedelta(hours=9))
+MAX_PAGES = 20
+
+# http/https URL 패턴
+URL_PATTERN = re.compile(
+    r'https?://([a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?'
+    r'(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*'
+    r'\.[a-zA-Z]{2,})'
+)
+
+# http 없이 텍스트로만 적힌 도메인 패턴 (주요 TLD만)
+PLAIN_DOMAIN_PATTERN = re.compile(
+    r'\b([a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]'
+    r'\.(?:com|net|org|io|kr|co\.kr|shop|site|online|store|info|biz|xyz|top|club))\b'
+)
 
 
 def parse_cookie(raw: str) -> str:
@@ -25,31 +37,18 @@ def parse_cookie(raw: str) -> str:
 
 
 def extract_domains_from_text(text: str) -> list:
-    # 1. HTML 태그 제거 (주소 사이에 낀 <br>, <div> 등을 공백으로 치환하여 연결성 확보)
-    # 네이버 본문은 HTML 형태라 이 작업이 없으면 주소가 중간에 끊길 수 있습니다.
-    clean_text = re.sub(r'<[^>]*>', ' ', text)
-    
-    # 2. 더 넓은 범위의 URL 패턴 (http가 없거나 복잡한 파라미터가 있어도 수집)
-    url_pattern = re.compile(
-        r'(?:https?://)?(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?::\d+)?(?:/[^\s<>"\']*)?'
-    )
-    
-    found = url_pattern.findall(clean_text)
-    
-    cleaned_results = []
-    if found:
-        for f in set(found):
-            # 주소 끝에 붙은 불필요한 기호(마침표, 괄호, 따옴표 등) 깔끔하게 정리
-            clean_url = f.strip('.,;)"\'/ ')
-            
-            # 너무 짧은 텍스트(예: ".com")는 제외하고 유효한 것만 추가
-            if '.' in clean_url and len(clean_url) > 5:
-                # is_excluded가 무조건 False를 뱉으므로 모든 도메인이 통과됩니다.
-                domain_part = clean_url.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
-                if not is_excluded(domain_part):
-                    cleaned_results.append(clean_url)
-                
-    return list(set(cleaned_results)) # 최종 중복 제거
+    """http/https URL + 텍스트 도메인 모두 추출"""
+    found = set()
+
+    # http/https URL에서 추출
+    for d in URL_PATTERN.findall(text):
+        found.add(d.lower())
+
+    # http 없는 텍스트 도메인 추출
+    for d in PLAIN_DOMAIN_PATTERN.findall(text):
+        found.add(d.lower())
+
+    return list(found)
 
 
 def run_domain_collector():
@@ -72,7 +71,7 @@ def run_domain_collector():
     st.markdown("## 🔎 사기 의심 도메인 수집")
     st.markdown(
         "<p style='color:#868e96; margin-top:-0.5rem;'>"
-        "네이버 카페 게시글에서 최근 N시간 내 사기 의심 도메인을 추출합니다."
+        "네이버 카페 게시글에서 최근 N시간 내 언급된 도메인을 전체 추출합니다."
         "</p>",
         unsafe_allow_html=True
     )
@@ -132,7 +131,7 @@ def run_domain_collector():
     cutoff_time = datetime.now(KST) - timedelta(hours=hours_limit)
     filtered = []
 
-    # ── 페이지 자동 순회 (12시간 이내 글만) ──────────────────────
+    # ── 페이지 자동 순회 ─────────────────────────────────────────
     st.info(f"📋 최근 {hours_limit}시간 이내 게시글 수집 중...")
     page_status = st.empty()
 
@@ -162,7 +161,6 @@ def run_domain_collector():
 
             data = res.json()
 
-            # 응답 구조 자동 탐색
             articles = None
             for key_path in [
                 ['message', 'result', 'articleList'],
@@ -209,7 +207,7 @@ def run_domain_collector():
                         pass
 
                 if art_time and art_time < cutoff_time:
-                    stop = True  # 12시간 넘은 글 나오면 중단
+                    stop = True
                     break
 
                 art['_parsed_time'] = art_time
@@ -245,31 +243,40 @@ def run_domain_collector():
         status_text.caption(f"본문 분석 중... ({i+1}/{len(filtered)}) {title[:30]}...")
 
         content_url = (
-            f"https://apis.naver.com/cafe-web/cafe-articleapi/v2"
+            f"https://article.cafe.naver.com/gw/v4"
             f"/cafes/25470135/articles/{article_id}"
+            f"?query=&boardType=L&useCafeId=true&requestFrom=A"
         )
         try:
             content_res = requests.get(content_url, headers=headers, timeout=10)
+
             try:
                 content_data = content_res.json()
                 body = ""
                 for path in [
-                    ['message', 'result', 'article', 'contentHtml'],
-                    ['message', 'result', 'article', 'content'],
                     ['result', 'article', 'contentHtml'],
                     ['result', 'article', 'content'],
+                    ['article', 'contentHtml'],
+                    ['article', 'content'],
+                    ['message', 'result', 'article', 'contentHtml'],
+                    ['message', 'result', 'article', 'content'],
                 ]:
                     try:
                         node = content_data
                         for k in path:
                             node = node[k]
-                        body = str(node)
-                        break
+                        if node:
+                            body = str(node)
+                            break
                     except (KeyError, TypeError):
                         continue
                 text_to_scan = body if body else content_res.text
             except Exception:
                 text_to_scan = content_res.text
+
+            if debug_mode and i == 0:
+                with st.expander("첫 번째 글 본문 응답 (앞 1000자)"):
+                    st.code(text_to_scan[:1000])
 
             domains = extract_domains_from_text(text_to_scan)
             for d in domains:
