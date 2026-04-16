@@ -279,11 +279,11 @@ def collect_blog(cookie_value: str, hours_limit: int,
 
         status_placeholder.caption(f"📝 블로그 페이지 {page} 수집 중...")
 
-        # 블로그 포스트 목록 API
+        # 블로그 포스트 목록 API (JSON 반환 엔드포인트)
         list_url = (
-            f"https://blog.naver.com/PostList.naver"
-            f"?blogId={BLOG_ID}&viewdate=&currentPage={page}"
-            f"&postListNo=&blogType=&activeStatus=&countPerPage=30"
+            f"https://blog.naver.com/PostTitleListAsync.naver"
+            f"?blogId={BLOG_ID}&currentPage={page}&countPerPage=30"
+            f"&postListNo=&categoryNo=0&activeStatus=1&blogType=&viewdate="
         )
 
         try:
