@@ -340,6 +340,8 @@ def collect_blog(cookie_value: str, hours_limit: int,
                     continue
 
             if not posts:
+                if debug_mode:
+                    st.error(f"posts 파싱 실패. data 키: {list(data.keys()) if isinstance(data, dict) else type(data)}")
                 # 포스트가 없거나 마지막 페이지
                 stop = True
                 break
