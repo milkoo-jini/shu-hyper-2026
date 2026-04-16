@@ -263,7 +263,9 @@ def _fetch_blog_post_text(blog_id: str, log_no: str, headers: dict) -> str:
     try:
         url = f"https://blog.naver.com/PostView.naver?blogId={blog_id}&logNo={log_no}&redirect=Dlog"
         res = requests.get(url, headers=headers, timeout=10)
-        return res.text
+        # HTML 태그 제거하고 텍스트만 반환
+        text = re.sub(r'<[^>]+>', ' ', res.text)
+        return text
     except Exception:
         return ""
 
@@ -357,7 +359,9 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 post_url = f"https://blog.naver.com/{BLOG_ID}/{log_no}"
 
                 # 제목 + 요약 + 본문에서 도메인 추출
-                full_text = title + " " + summary
+                # title의 공백 제거 버전도 포함 (예: "bit-ment .com" → "bit-ment.com")
+                title_nospace = title.replace(' ', '')
+                full_text = title + " " + title_nospace + " " + summary
                 if log_no:
                     full_text += " " + _fetch_blog_post_text(BLOG_ID, log_no, headers)
                 domains = extract_domains_from_text(full_text)
@@ -424,8 +428,7 @@ def run_domain_collector():
         st.markdown(
             "<p style='color:#495057; font-size:0.9rem;'>"
             "secrets에 저장된 네이버 계정 쿠키를 사용합니다.<br>"
-            "쿠키가 만료된 경우 <b>.streamlit/secrets.toml</b>을 업데이트 해주세요.<br>"
-            f"블로그 수집 대상: <b>blog.naver.com/{BLOG_ID}</b>"
+            "쿠키가 만료된 경우 <b>.streamlit/secrets.toml</b>을 업데이트 해주세요."
             "</p>",
             unsafe_allow_html=True
         )
