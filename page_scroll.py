@@ -223,16 +223,32 @@ def _parse_blog_timestamp(ts_str: str) -> datetime | None:
     """블로그 날짜 문자열 → KST datetime"""
     if not ts_str:
         return None
+    s = ts_str.strip()
+
+    # "N시간 전" 처리
+    m = re.match(r'(\d+)시간\s*전', s)
+    if m:
+        return datetime.now(KST) - timedelta(hours=int(m.group(1)))
+
+    # "N분 전" 처리
+    m = re.match(r'(\d+)분\s*전', s)
+    if m:
+        return datetime.now(KST) - timedelta(minutes=int(m.group(1)))
+
+    # "방금 전" 처리
+    if '방금' in s:
+        return datetime.now(KST)
+
     formats = [
-        "%Y-%m-%dT%H:%M:%S%z",   # ISO 8601
-        "%Y. %m. %d. %H:%M",      # 네이버 블로그 일반 형식
-        "%Y.%m.%d.",               # 날짜만
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y. %m. %d. %H:%M",
+        "%Y.%m.%d.",
         "%Y-%m-%d %H:%M:%S",
         "%Y%m%d",
     ]
     for fmt in formats:
         try:
-            dt = datetime.strptime(ts_str.strip(), fmt)
+            dt = datetime.strptime(s, fmt)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=KST)
             return dt.astimezone(KST)
@@ -324,10 +340,12 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 break
 
             for post in posts:
+                from urllib.parse import unquote_plus
                 log_no = str(post.get('logNo') or post.get('no') or '')
-                title = post.get('title') or post.get('subject') or f"글_{log_no}"
+                raw_title = post.get('title') or post.get('subject') or f"글_{log_no}"
+                title = unquote_plus(raw_title)
                 add_date = post.get('addDate') or post.get('writeDate') or post.get('regDate') or ''
-                summary = post.get('summary') or post.get('content') or ''
+                summary = unquote_plus(post.get('summary') or post.get('content') or '')
 
                 # 날짜 파싱
                 post_time = _parse_blog_timestamp(str(add_date))
