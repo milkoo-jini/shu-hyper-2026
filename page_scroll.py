@@ -342,9 +342,15 @@ def collect_blog(cookie_value: str, hours_limit: int,
             if not posts:
                 if debug_mode:
                     st.error(f"posts 파싱 실패. data 키: {list(data.keys()) if isinstance(data, dict) else type(data)}")
-                # 포스트가 없거나 마지막 페이지
                 stop = True
                 break
+
+            if debug_mode and page == 1:
+                first = posts[0]
+                ad = first.get('addDate') or first.get('writeDate') or ''
+                pt = _parse_blog_timestamp(str(ad))
+                ct = datetime.now(KST) - timedelta(hours=hours_limit)
+                st.code(f"첫 포스트 addDate: {ad!r} → 파싱결과: {pt} | cutoff: {ct}")
 
             for idx, post in enumerate(posts):
                 from urllib.parse import unquote_plus
