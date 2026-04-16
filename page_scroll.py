@@ -72,7 +72,7 @@ def run_domain_collector():
     st.markdown("## 🔎 사기 의심 도메인 수집")
     st.markdown(
         "<p style='color:#868e96; margin-top:-0.5rem;'>"
-        "네이버 카페 게시글에서 최근 N시간 내 언급된 도메인을 전체 추출합니다."
+        "네이버 카페 게시글 제목 및 요약에서 최근 N시간 내 언급된 도메인을 추출합니다."
         "</p>",
         unsafe_allow_html=True
     )
@@ -131,7 +131,7 @@ def run_domain_collector():
     st.session_state.domain_running = True
     st.session_state.domain_stop = False
 
-    # ── 공통 헤더 (브라우저 실제 헤더와 동일) ──────────────────
+    # ── 공통 헤더 ────────────────────────────────────────────────
     base_headers = {
         'User-Agent': (
             'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) '
@@ -153,7 +153,7 @@ def run_domain_collector():
     }
 
     cutoff_time = datetime.now(KST) - timedelta(hours=hours_limit)
-    filtered = []
+    results = []
 
     # ── 페이지 자동 순회 ─────────────────────────────────────────
     st.info(f"📋 최근 {hours_limit}시간 이내 게시글 수집 중...")
@@ -217,12 +217,15 @@ def run_domain_collector():
                 break
 
             for art in articles:
+                # 실제 article 데이터 추출 (type/item 구조 대응)
+                item = art.get('item', art)
+
                 ts = (
-                    art.get('writeDateTimestamp')
-                    or art.get('lastUpdateDate')
-                    or art.get('createDate')
-                    or art.get('writeDate')
-                    or art.get('regDate')
+                    item.get('writeDateTimestamp')
+                    or item.get('lastUpdateDate')
+                    or item.get('createDate')
+                    or item.get('writeDate')
+                    or item.get('regDate')
                 )
                 art_time = None
                 if ts:
@@ -242,8 +245,22 @@ def run_domain_collector():
                     stop = True
                     break
 
-                art['_parsed_time'] = art_time
-                filtered.append(art)
+                article_id = item.get('articleId') or item.get('id')
+                title = item.get('subject') or item.get('title') or f"글_{article_id}"
+                summary = item.get('summary') or ''
+                time_str = art_time.strftime('%Y-%m-%d %H:%M') if art_time else "-"
+
+                # 제목 + 요약에서 도메인 추출
+                full_text = title + " " + summary
+                domains = extract_domains_from_text(full_text)
+
+                for d in domains:
+                    results.append({
+                        "도메인": d,
+                        "작성시간": time_str,
+                        "글제목": title,
+                        "링크": f"https://cafe.naver.com/f-e/cafes/25470135/articles/{article_id}"
+                    })
 
         except Exception as e:
             st.error(f"❌ 페이지 {page} 오류: {e}")
@@ -254,94 +271,6 @@ def run_domain_collector():
         time.sleep(0.3)
 
     page_status.empty()
-
-    if not filtered:
-        st.warning(f"최근 {hours_limit}시간 내 게시글이 없습니다.")
-        st.session_state.domain_running = False
-        return
-
-    st.success(f"총 {page-1}페이지에서 **{len(filtered)}개** 글 발견 → 본문 분석 시작")
-
-    # ── 본문 수집 및 도메인 추출 ──────────────────────────────────
-    results = []
-    prog_bar = st.progress(0)
-    status_text = st.empty()
-
-    for i, art in enumerate(filtered):
-        if st.session_state.domain_stop:
-            status_text.warning("⏹ 수집이 중단됐습니다.")
-            break
-
-        article_id = art.get('articleId') or art.get('id')
-        title = art.get('subject') or art.get('title') or f"글_{article_id}"
-        art_time = art.get('_parsed_time')
-        time_str = art_time.strftime('%Y-%m-%d %H:%M') if art_time else "-"
-
-        status_text.caption(f"본문 분석 중... ({i+1}/{len(filtered)}) {title[:30]}...")
-
-        # 본문 API - referer를 해당 글 URL로 동적 설정
-        content_url = (
-            f"https://article.cafe.naver.com/gw/v4"
-            f"/cafes/25470135/articles/{article_id}"
-            f"?query=&useCafeId=true&requestFrom=A"
-        )
-        content_headers = {
-            **base_headers,
-            'Referer': (
-                f"https://cafe.naver.com/ca-fe/cafes/25470135/articles/{article_id}"
-                f"?referrerAllArticles=true&fromNext=true"
-            ),
-        }
-
-        try:
-            content_res = requests.get(content_url, headers=content_headers, timeout=10)
-
-            try:
-                content_data = content_res.json()
-                body = ""
-                for path in [
-                    ['result', 'article', 'contentHtml'],
-                    ['result', 'article', 'content'],
-                    ['article', 'contentHtml'],
-                    ['article', 'content'],
-                    ['message', 'result', 'article', 'contentHtml'],
-                    ['message', 'result', 'article', 'content'],
-                ]:
-                    try:
-                        node = content_data
-                        for k in path:
-                            node = node[k]
-                        if node:
-                            body = str(node)
-                            break
-                    except (KeyError, TypeError):
-                        continue
-                text_to_scan = body if body else content_res.text
-            except Exception:
-                text_to_scan = content_res.text
-
-            if debug_mode and i == 0:
-                with st.expander("첫 번째 글 본문 응답 (앞 1000자)"):
-                    st.code(text_to_scan[:1000])
-
-            # 제목 + 본문 함께 스캔
-            full_text = title + " " + text_to_scan
-            domains = extract_domains_from_text(full_text)
-
-            for d in domains:
-                results.append({
-                    "도메인": d,
-                    "작성시간": time_str,
-                    "글제목": title,
-                    "링크": f"https://cafe.naver.com/f-e/cafes/25470135/articles/{article_id}"
-                })
-        except Exception:
-            pass
-
-        prog_bar.progress((i + 1) / len(filtered))
-        time.sleep(0.3)
-
-    status_text.empty()
     st.session_state.domain_running = False
 
     # ── 결과 출력 ────────────────────────────────────────────────
@@ -358,7 +287,7 @@ def run_domain_collector():
     with col1:
         st.markdown(f"<div class='status-badge'>🌐 추출 도메인: {df['도메인'].nunique()}개</div>", unsafe_allow_html=True)
     with col2:
-        st.markdown(f"<div class='status-badge'>📄 분석 게시글: {len(filtered)}개</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='status-badge'>📄 분석 게시글: {df['글제목'].nunique()}개</div>", unsafe_allow_html=True)
     with col3:
         st.markdown(f"<div class='status-badge'>⏱ 수집 범위: 최근 {hours_limit}시간</div>", unsafe_allow_html=True)
 
