@@ -74,11 +74,17 @@ def extract_domains_from_text(text: str) -> list:
     """http/https URL + 텍스트 도메인 모두 추출 (명백한 정상 도메인 제외)"""
     found = set()
     for d in URL_PATTERN.findall(text):
-        if not is_excluded(d.lower()):
-            found.add(d.lower())
+        d = d.lower()
+        if d.startswith('www.'):
+            d = d[4:]
+        if not is_excluded(d):
+            found.add(d)
     for d in PLAIN_DOMAIN_PATTERN.findall(text):
-        if not is_excluded(d.lower()):
-            found.add(d.lower())
+        d = d.lower()
+        if d.startswith('www.'):
+            d = d[4:]
+        if not is_excluded(d):
+            found.add(d)
     return list(found)
 
 
