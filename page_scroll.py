@@ -39,19 +39,20 @@ def parse_cookie(raw: str) -> str:
 def extract_domains_from_text(text: str) -> list:
     """http/https URL + 텍스트 도메인 모두 추출"""
     found = set()
-
-    # http/https URL에서 추출
     for d in URL_PATTERN.findall(text):
         found.add(d.lower())
-
-    # http 없는 텍스트 도메인 추출
     for d in PLAIN_DOMAIN_PATTERN.findall(text):
         found.add(d.lower())
-
     return list(found)
 
 
 def run_domain_collector():
+
+    # ── 세션 상태 초기화 ─────────────────────────────────────────
+    if 'domain_running' not in st.session_state:
+        st.session_state.domain_running = False
+    if 'domain_stop' not in st.session_state:
+        st.session_state.domain_stop = False
 
     # ── 쿠키 로드 ────────────────────────────────────────────────
     try:
@@ -101,18 +102,42 @@ def run_domain_collector():
 
     st.markdown("---")
 
-    run_btn = st.button("🚀 도메인 수집 시작", use_container_width=True, type="primary")
+    # ── 버튼 영역 ────────────────────────────────────────────────
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        run_btn = st.button(
+            "🚀 도메인 수집 시작",
+            use_container_width=True,
+            type="primary"
+        )
+    with col_btn2:
+        stop_btn = st.button(
+            "⏹ 수집 중단",
+            use_container_width=True,
+            type="secondary"
+        )
+
+    if stop_btn:
+        st.session_state.domain_stop = True
+        st.session_state.domain_running = False
+        st.warning("⏹ 수집이 중단됐습니다.")
+        return
 
     if not run_btn:
-        with st.expander("📌 쿠키 갱신 방법", expanded=False):
-            st.markdown("""
-            1. 크롬에 **Cookie-Editor** (`cgagnier` 제작) 설치
-            2. 네이버 로그인 후 해당 카페 접속
-            3. Cookie-Editor → **Export** → **JSON (Netscape format)**
-            4. 복사한 JSON 전체를 Streamlit Cloud **Secrets**의 `NAVER_COOKIE`에 붙여넣기
-            5. 저장 후 앱 재시작
-            """)
+        if not st.session_state.domain_running:
+            with st.expander("📌 쿠키 갱신 방법", expanded=False):
+                st.markdown("""
+                1. 크롬에 **Cookie-Editor** (`cgagnier` 제작) 설치
+                2. 네이버 로그인 후 해당 카페 접속
+                3. Cookie-Editor → **Export** → **JSON (Netscape format)**
+                4. 복사한 JSON 전체를 Streamlit Cloud **Secrets**의 `NAVER_COOKIE`에 붙여넣기
+                5. 저장 후 앱 재시작
+                """)
         return
+
+    # 수집 시작 시 중단 플래그 초기화
+    st.session_state.domain_running = True
+    st.session_state.domain_stop = False
 
     # ── 헤더 ─────────────────────────────────────────────────────
     headers = {
@@ -139,6 +164,9 @@ def run_domain_collector():
     stop = False
 
     while not stop and page <= MAX_PAGES:
+        if st.session_state.domain_stop:
+            break
+
         page_status.caption(f"페이지 {page} 불러오는 중...")
         list_url = (
             f"https://apis.naver.com/cafe-web/cafe-boardlist-api/v1"
@@ -225,6 +253,7 @@ def run_domain_collector():
 
     if not filtered:
         st.warning(f"최근 {hours_limit}시간 내 게시글이 없습니다.")
+        st.session_state.domain_running = False
         return
 
     st.success(f"총 {page-1}페이지에서 **{len(filtered)}개** 글 발견 → 본문 분석 시작")
@@ -235,6 +264,10 @@ def run_domain_collector():
     status_text = st.empty()
 
     for i, art in enumerate(filtered):
+        if st.session_state.domain_stop:
+            status_text.warning("⏹ 수집이 중단됐습니다.")
+            break
+
         article_id = art.get('articleId') or art.get('id')
         title = art.get('subject') or art.get('title') or f"글_{article_id}"
         art_time = art.get('_parsed_time')
@@ -245,7 +278,7 @@ def run_domain_collector():
         content_url = (
             f"https://article.cafe.naver.com/gw/v4"
             f"/cafes/25470135/articles/{article_id}"
-            f"?query=&boardType=L&useCafeId=true&requestFrom=A"
+            f"?query=?query=&boardType=L&useCafeId=true&requestFrom=AuseCafeId=true?query=&boardType=L&useCafeId=true&requestFrom=ArequestFrom=A"
         )
         try:
             content_res = requests.get(content_url, headers=headers, timeout=10)
@@ -278,7 +311,10 @@ def run_domain_collector():
                 with st.expander("첫 번째 글 본문 응답 (앞 1000자)"):
                     st.code(text_to_scan[:1000])
 
-            domains = extract_domains_from_text(text_to_scan)
+            # 제목 + 본문 함께 스캔
+            full_text = title + " " + text_to_scan
+            domains = extract_domains_from_text(full_text)
+
             for d in domains:
                 results.append({
                     "도메인": d,
@@ -293,6 +329,7 @@ def run_domain_collector():
         time.sleep(0.3)
 
     status_text.empty()
+    st.session_state.domain_running = False
 
     # ── 결과 출력 ────────────────────────────────────────────────
     st.markdown("---")
