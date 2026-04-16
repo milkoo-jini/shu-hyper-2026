@@ -317,8 +317,9 @@ def collect_blog(cookie_value: str, hours_limit: int,
             # JSON 응답 파싱
             try:
                 data = res.json()
-            except Exception:
-                # HTML일 경우 스킵
+            except Exception as je:
+                if debug_mode:
+                    st.error(f"JSON 파싱 실패: {je}\n응답 앞 200자: {res.text[:200]}")
                 stop = True
                 break
 
@@ -501,8 +502,6 @@ def run_domain_collector():
 
     cafe_status = st.empty()
     cafe_status.caption("📋 카페 수집 준비 중...")
-    blog_status = st.empty()
-    blog_status.caption("📝 블로그 수집 준비 중...")
 
     cafe_results = []
     blog_results = []
@@ -515,10 +514,14 @@ def run_domain_collector():
     cafe_status.caption(f"✅ 카페 수집 완료 ({len(cafe_results)}건)")
 
     # 블로그 수집
-    blog_results = collect_blog(
-        cookie_value, hours_limit,
-        debug_mode, blog_status, stop_flag
-    )
+    blog_status = st.empty()
+    blog_debug = st.container()  # 디버그 출력용 고정 영역
+    blog_status.caption("📝 블로그 수집 준비 중...")
+    with blog_debug:
+        blog_results = collect_blog(
+            cookie_value, hours_limit,
+            debug_mode, blog_status, stop_flag
+        )
     blog_status.caption(f"✅ 블로그 수집 완료 ({len(blog_results)}건)")
 
     st.session_state.domain_running = False
