@@ -314,14 +314,18 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 st.markdown("**🛠 블로그 디버그**")
                 st.code(f"HTTP {res.status_code} | {len(res.text):,} bytes\n{res.text[:2000]}")
 
-            # JSON 응답 파싱
+            # JSON 응답 파싱 (Invalid \escape 처리)
             try:
                 data = res.json()
-            except Exception as je:
-                if debug_mode:
-                    st.error(f"JSON 파싱 실패: {je}\n응답 앞 200자: {res.text[:200]}")
-                stop = True
-                break
+            except Exception:
+                try:
+                    cleaned = res.text.replace('\\', '\\\\')
+                    data = json.loads(cleaned)
+                except Exception as je:
+                    if debug_mode:
+                        st.error(f"JSON 파싱 실패: {je}")
+                    stop = True
+                    break
 
             # 포스트 목록 추출 (네이버 블로그 PostList API 구조)
             posts = None
