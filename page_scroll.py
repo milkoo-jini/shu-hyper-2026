@@ -8,14 +8,38 @@ from datetime import datetime, timedelta, timezone
 import time
 
 # 제외할 시스템/플랫폼 도메인
-EXCLUDE_KEYWORDS = [
-    'naver', 'daum', 'google', 'kakaocorp', 'pstatic', 'cafe',
-    'kakao', 'namu', 'wikipedia', 'youtube', 'gstatic',
-    'cloudflare', 'amazonaws', 'jquery', 'bootstrapcdn',
-    'fontawesome', 'w3.org', 'schema.org', 'mozilla', 'microsoft',
-    'apple', 'facebook', 'instagram', 'twitter', 'tiktok',
-    'daumcdn', 'naverusercontent', 'kakaocdn', 'steamusercontent'
-]
+EXCLUDE_DOMAINS = {
+    'naver.com', 'blog.naver.com', 'cafe.naver.com', 'search.naver.com',
+    'map.naver.com', 'shopping.naver.com', 'news.naver.com',
+    'daum.net', 'map.daum.net', 'search.daum.net',
+    'google.com', 'google.co.kr', 'googleapis.com', 'gstatic.com',
+    'kakao.com', 'kakaocorp.com', 'kakaocdn.net', 'daumcdn.net',
+    'youtube.com', 'youtu.be',
+    'wikipedia.org',
+    'cloudflare.com',
+    'amazonaws.com',
+    'jquery.com',
+    'bootstrapcdn.com',
+    'fontawesome.com',
+    'w3.org',
+    'schema.org',
+    'mozilla.org',
+    'microsoft.com',
+    'apple.com',
+    'facebook.com', 'fb.com',
+    'instagram.com',
+    'twitter.com', 'x.com',
+    'tiktok.com',
+    'pstatic.net',
+    'naverusercontent.com',
+    'steamusercontent.com',
+    'namu.wiki',
+}
+
+def is_excluded(domain: str) -> bool:
+    d = domain.lower()
+    # 정확히 일치하거나 서브도메인으로 끝나는 경우만 제외
+    return any(d == ex or d.endswith('.' + ex) for ex in EXCLUDE_DOMAINS)
 
 KST = timezone(timedelta(hours=9))
 
@@ -34,7 +58,6 @@ def parse_cookie(raw: str) -> str:
     try:
         data = json.loads(raw)
         if isinstance(data, list):
-            # Cookie-Editor JSON 형태 → 문자열로 변환
             parts = []
             for item in data:
                 name = item.get('name', '')
@@ -44,7 +67,6 @@ def parse_cookie(raw: str) -> str:
             return '; '.join(parts)
     except (json.JSONDecodeError, TypeError):
         pass
-    # 이미 문자열 형태면 그대로 반환
     return raw
 
 
@@ -66,8 +88,7 @@ def run_domain_collector():
         raw_cookie = st.secrets["NAVER_COOKIE"]
     except KeyError:
         st.error("❌ secrets.toml에 NAVER_COOKIE가 설정되지 않았습니다.")
-        st.markdown("**설정 방법:** `.streamlit/secrets.toml`에 아래와 같이 추가하세요.")
-        st.code("NAVER_COOKIE = '''[ { \"name\": \"NID_AUT\", \"value\": \"...\", ... } ]'''")
+        st.code("NAVER_COOKIE = '''[ { \"name\": \"NID_AUT\", \"value\": \"...\" } ]'''")
         return
 
     if not raw_cookie or not raw_cookie.strip():
@@ -121,8 +142,8 @@ def run_domain_collector():
             1. 크롬에 **Cookie-Editor** (`cgagnier` 제작) 확장 프로그램 설치
             2. 네이버 로그인 후 해당 카페 접속
             3. Cookie-Editor 아이콘 클릭 → **Export** → **JSON (Netscape format)** 선택
-            4. 복사된 JSON을 `.streamlit/secrets.toml`의 `NAVER_COOKIE`에 붙여넣기
-            5. 앱 재시작
+            4. 복사된 JSON 전체를 Streamlit Cloud **Secrets**의 `NAVER_COOKIE`에 붙여넣기
+            5. 저장 후 앱 재시작
             """)
         return
 
@@ -134,17 +155,20 @@ def run_domain_collector():
             'Chrome/124.0.0.0 Safari/537.36'
         ),
         'Cookie': cookie_value,
-        'Referer': 'https://cafe.naver.com/ca-fe/cafes/25470135/articles',
+        'Referer': 'https://cafe.naver.com/notouch7',
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'ko-KR,ko;q=0.9',
+        'Origin': 'https://cafe.naver.com',
     }
 
     cutoff_time = datetime.now(KST) - timedelta(hours=hours_limit)
     results = []
 
+    # ── 실제 API URL ─────────────────────────────────────────────
     list_url = (
-        f"https://cafe.naver.com/ca-fe/cafes/25470135/articles"
-        f"?query=&searchBy=0&sortBy=date&page=1&size={page_size}"
+        f"https://apis.naver.com/cafe-web/cafe-boardlist-api/v1"
+        f"/cafes/25470135/menus/0/articles"
+        f"?page=1&pageSize={page_size}&sortBy=TIME&viewType=L"
     )
 
     try:
@@ -165,8 +189,8 @@ def run_domain_collector():
                     f"<div class='status-badge'>응답 크기: {len(res.text):,} bytes</div>",
                     unsafe_allow_html=True
                 )
-            with st.expander("원본 응답 (앞 500자)"):
-                st.code(res.text[:500])
+            with st.expander("원본 응답 (앞 1000자)"):
+                st.code(res.text[:1000])
 
         # ── JSON 파싱 ────────────────────────────────────────────
         data = res.json()
@@ -174,6 +198,8 @@ def run_domain_collector():
         # 응답 구조 자동 탐색
         articles = None
         for key_path in [
+            ['message', 'result', 'articleList'],
+            ['message', 'result', 'articles'],
             ['result', 'articleList'],
             ['result', 'articles'],
             ['articleList'],
@@ -183,8 +209,9 @@ def run_domain_collector():
                 node = data
                 for k in key_path:
                     node = node[k]
-                articles = node
-                break
+                if isinstance(node, list):
+                    articles = node
+                    break
             except (KeyError, TypeError):
                 continue
 
@@ -199,6 +226,7 @@ def run_domain_collector():
         for art in articles:
             ts = (
                 art.get('writeDateTimestamp')
+                or art.get('lastUpdateDate')
                 or art.get('createDate')
                 or art.get('writeDate')
                 or art.get('regDate')
@@ -240,10 +268,38 @@ def run_domain_collector():
 
             status_text.caption(f"분석 중... ({i+1}/{len(filtered)}) {title[:30]}...")
 
-            content_url = f"https://cafe.naver.com/ca-fe/cafes/25470135/articles/{article_id}"
+            # 본문 API
+            content_url = (
+                f"https://apis.naver.com/cafe-web/cafe-articleapi/v2"
+                f"/cafes/25470135/articles/{article_id}"
+            )
             try:
                 content_res = requests.get(content_url, headers=headers, timeout=10)
-                domains = extract_domains_from_text(content_res.text)
+
+                # 본문 텍스트 추출
+                try:
+                    content_data = content_res.json()
+                    # 본문 HTML 또는 텍스트 탐색
+                    body = ""
+                    for path in [
+                        ['message', 'result', 'article', 'contentHtml'],
+                        ['message', 'result', 'article', 'content'],
+                        ['result', 'article', 'contentHtml'],
+                        ['result', 'article', 'content'],
+                    ]:
+                        try:
+                            node = content_data
+                            for k in path:
+                                node = node[k]
+                            body = str(node)
+                            break
+                        except (KeyError, TypeError):
+                            continue
+                    text_to_scan = body if body else content_res.text
+                except Exception:
+                    text_to_scan = content_res.text
+
+                domains = extract_domains_from_text(text_to_scan)
 
                 for d in domains:
                     results.append({
