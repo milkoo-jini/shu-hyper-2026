@@ -6,7 +6,7 @@ import pandas as pd
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 KST = timezone(timedelta(hours=9))
 MAX_PAGES = 20
@@ -500,43 +500,25 @@ def run_domain_collector():
     df = pd.DataFrame(all_results).drop_duplicates(subset=['도메인', '링크'])
     df = df.sort_values('작성시간', ascending=False).reset_index(drop=True)
 
-    # 요약 지표
-    col1, col2, col3, col4 = st.columns(4)
-    cafe_df = df[df['출처'] == '카페']
-    blog_df = df[df['출처'] == '블로그']
-
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("🌐 전체 도메인", f"{df['도메인'].nunique()}개")
+        st.markdown(f"<div class='status-badge'>🌐 추출 도메인: {df['도메인'].nunique()}개</div>", unsafe_allow_html=True)
     with col2:
-        st.metric("📋 카페 도메인", f"{cafe_df['도메인'].nunique()}개")
+        st.markdown(f"<div class='status-badge'>📄 분석 게시글: {df['글제목'].nunique()}개</div>", unsafe_allow_html=True)
     with col3:
-        st.metric("📝 블로그 도메인", f"{blog_df['도메인'].nunique()}개")
-    with col4:
-        st.metric("📄 분석 게시글", f"{df['글제목'].nunique()}개")
+        st.markdown(f"<div class='status-badge'>⏱ 수집 범위: 최근 {hours_limit}시간</div>", unsafe_allow_html=True)
 
-    # 출처 필터 탭
-    tab_all, tab_cafe, tab_blog = st.tabs(["전체", "카페만", "블로그만"])
+    st.markdown("#### 📊 수집 결과")
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
-    with tab_all:
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    with tab_cafe:
-        st.dataframe(cafe_df.reset_index(drop=True), use_container_width=True, hide_index=True)
-    with tab_blog:
-        st.dataframe(blog_df.reset_index(drop=True), use_container_width=True, hide_index=True)
-
-    # 엑셀 다운로드 (시트 분리)
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='전체')
-        if not cafe_df.empty:
-            cafe_df.reset_index(drop=True).to_excel(writer, index=False, sheet_name='카페')
-        if not blog_df.empty:
-            blog_df.reset_index(drop=True).to_excel(writer, index=False, sheet_name='블로그')
+        df.to_excel(writer, index=False, sheet_name='사기도메인')
     output.seek(0)
 
     now_str = datetime.now(KST).strftime('%Y%m%d_%H%M')
     st.download_button(
-        label="📥 엑셀 다운로드 (전체/카페/블로그 시트 분리)",
+        label="📥 엑셀 다운로드",
         data=output.getvalue(),
         file_name=f"사기의심도메인_{now_str}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
