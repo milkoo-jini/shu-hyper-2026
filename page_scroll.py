@@ -341,7 +341,7 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 stop = True
                 break
 
-            for post in posts:
+            for idx, post in enumerate(posts):
                 from urllib.parse import unquote_plus
                 log_no = str(post.get('logNo') or post.get('no') or '')
                 raw_title = post.get('title') or post.get('subject') or f"글_{log_no}"
@@ -363,7 +363,10 @@ def collect_blog(cookie_value: str, hours_limit: int,
                 title_nospace = title.replace(' ', '')
                 full_text = title + " " + title_nospace + " " + summary
                 if log_no:
-                    full_text += " " + _fetch_blog_post_text(BLOG_ID, log_no, headers)
+                    body_text = _fetch_blog_post_text(BLOG_ID, log_no, headers)
+                    if debug_mode and page == 1 and idx == 0:
+                        st.code(f"본문 앞 500자:\n{body_text[:500]}")
+                    full_text += " " + body_text
                 domains = extract_domains_from_text(full_text)
 
                 for d in domains:
