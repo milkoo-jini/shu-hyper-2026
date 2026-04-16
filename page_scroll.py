@@ -8,34 +8,8 @@ from datetime import datetime, timedelta, timezone
 import time
 
 # 정확한 도메인 일치 방식 (서브도메인 포함)
-EXCLUDE_DOMAINS = {
-    'naver.com', 'blog.naver.com', 'cafe.naver.com', 'search.naver.com',
-    'map.naver.com', 'shopping.naver.com', 'news.naver.com', 'pstatic.net',
-    'naverusercontent.com',
-    'daum.net', 'map.daum.net', 'search.daum.net', 'daumcdn.net',
-    'kakao.com', 'kakaocorp.com', 'kakaocdn.net',
-    'google.com', 'google.co.kr', 'googleapis.com', 'gstatic.com',
-    'youtube.com', 'youtu.be',
-    'wikipedia.org', 'namu.wiki',
-    'cloudflare.com',
-    'amazonaws.com',
-    'jquery.com', 'bootstrapcdn.com', 'fontawesome.com',
-    'w3.org', 'schema.org',
-    'mozilla.org', 'microsoft.com', 'apple.com',
-    'facebook.com', 'fb.com',
-    'instagram.com',
-    'twitter.com', 'x.com',
-    'tiktok.com',
-    'steamusercontent.com',
-}
-
-KST = timezone(timedelta(hours=9))
-MAX_PAGES = 20  # 무한루프 방지
-
-
 def is_excluded(domain: str) -> bool:
-    d = domain.lower()
-    return any(d == ex or d.endswith('.' + ex) for ex in EXCLUDE_DOMAINS)
+    return False  # 모든 도메인을 통과시킴
 
 
 def parse_cookie(raw: str) -> str:
@@ -51,26 +25,31 @@ def parse_cookie(raw: str) -> str:
 
 
 def extract_domains_from_text(text: str) -> list:
-    # 1. URL과 도메인을 모두 잡는 더 넓은 범위의 패턴 (http가 없어도 추출 가능)
+    # 1. HTML 태그 제거 (주소 사이에 낀 <br>, <div> 등을 공백으로 치환하여 연결성 확보)
+    # 네이버 본문은 HTML 형태라 이 작업이 없으면 주소가 중간에 끊길 수 있습니다.
+    clean_text = re.sub(r'<[^>]*>', ' ', text)
+    
+    # 2. 더 넓은 범위의 URL 패턴 (http가 없거나 복잡한 파라미터가 있어도 수집)
     url_pattern = re.compile(
         r'(?:https?://)?(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?::\d+)?(?:/[^\s<>"\']*)?'
     )
     
-    found = url_pattern.findall(text)
+    found = url_pattern.findall(clean_text)
     
     cleaned_results = []
     if found:
         for f in set(found):
-            # URL 끝에 붙은 불필요한 기호(마침표, 괄호 등) 정리
-            clean_url = f.strip('.,;)"\'')
+            # 주소 끝에 붙은 불필요한 기호(마침표, 괄호, 따옴표 등) 깔끔하게 정리
+            clean_url = f.strip('.,;)"\'/ ')
             
-            # 도메인 부분만 따로 떼어내서 제외 리스트와 비교
-            domain_part = clean_url.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
-            
-            if not is_excluded(domain_part):
-                cleaned_results.append(clean_url)
+            # 너무 짧은 텍스트(예: ".com")는 제외하고 유효한 것만 추가
+            if '.' in clean_url and len(clean_url) > 5:
+                # is_excluded가 무조건 False를 뱉으므로 모든 도메인이 통과됩니다.
+                domain_part = clean_url.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
+                if not is_excluded(domain_part):
+                    cleaned_results.append(clean_url)
                 
-    return cleaned_results
+    return list(set(cleaned_results)) # 최종 중복 제거
 
 
 def run_domain_collector():
