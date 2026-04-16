@@ -12,18 +12,28 @@ MAX_PAGES = 20
 
 # 명백한 정상 도메인 제외 (서브도메인 포함, 피싱 도메인은 제외 안 됨)
 EXCLUDE_DOMAINS = {
-    'naver.com', 'cafe.naver.com', 'blog.naver.com', 'search.naver.com',
-    'map.naver.com', 'shopping.naver.com', 'news.naver.com', 'pstatic.net',
-    'naverusercontent.com',
-    'daum.net', 'daumcdn.net',
-    'kakao.com', 'kakaocorp.com', 'kakaocdn.net',
-    'google.com', 'google.co.kr', 'googleapis.com', 'gstatic.com',
-    'youtube.com', 'youtu.be',
-    'band.us',
+    # 네이버 계열
+    'naver.com', 'naver.me', 'cafe.naver.com', 'blog.naver.com',
+    'search.naver.com', 'map.naver.com', 'shopping.naver.com',
+    'news.naver.com', 'pstatic.net', 'naverusercontent.com', 'naver.it',
+    # 다음/카카오 계열
+    'daum.net', 'daumcdn.net', 'kakao.com', 'kakaocorp.com', 'kakaocdn.net',
+    'kakaopage.com', 'kko.to',
+    # 구글 계열
+    'google.com', 'google.co.kr', 'googleapis.com', 'gstatic.com', 'goo.gl',
+    # 소셜/미디어
+    'youtube.com', 'youtu.be', 'band.us',
     'instagram.com', 'facebook.com', 'fb.com',
-    'twitter.com', 'x.com',
-    'tiktok.com',
+    'twitter.com', 'x.com', 'tiktok.com',
+    # 백과사전
     'wikipedia.org', 'namu.wiki',
+    # 국내 주요 언론사
+    'edaily.co.kr', 'chosun.com', 'joins.com', 'joongang.co.kr',
+    'hani.co.kr', 'khan.co.kr', 'donga.com', 'mk.co.kr',
+    'hankyung.com', 'yna.co.kr', 'yonhapnews.co.kr',
+    'newsis.com', 'news1.kr', 'nocutnews.co.kr', 'ohmynews.com',
+    'sbs.co.kr', 'kbs.co.kr', 'mbc.co.kr', 'jtbc.co.kr', 'ytn.co.kr',
+    'etnews.com', 'dt.co.kr', 'zdnet.co.kr', 'bloter.net',
 }
 
 
@@ -116,9 +126,9 @@ def run_domain_collector():
         st.markdown("#### ⚙️ 수집 설정")
         hours_limit = st.selectbox(
             "수집 범위",
-            [6, 12, 24, 48, 72, 168],
+            [6, 12, 24, 48, 72, 168, 720],
             index=1,
-            format_func=lambda x: f"최근 {x}시간" if x < 48 else (f"최근 {x//24}일" if x < 168 else "최근 1주일")
+            format_func=lambda x: f"최근 {x}시간" if x < 48 else (f"최근 {x//24}일" if x < 720 else "최근 30일")
         )
         page_size = st.selectbox("페이지당 글 수", [15, 30, 50], index=1)
         debug_mode = st.checkbox("디버그 모드", value=False)
