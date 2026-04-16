@@ -131,18 +131,25 @@ def run_domain_collector():
     st.session_state.domain_running = True
     st.session_state.domain_stop = False
 
-    # ── 공통 헤더 ────────────────────────────────────────────────
+    # ── 공통 헤더 (브라우저 실제 헤더와 동일) ──────────────────
     base_headers = {
         'User-Agent': (
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-            'AppleWebKit/537.36 (KHTML, like Gecko) '
-            'Chrome/124.0.0.0 Safari/537.36'
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) '
+            'AppleWebKit/605.1.15 (KHTML, like Gecko) '
+            'Version/18.5 Mobile/15E148 Safari/604.1'
         ),
         'Cookie': cookie_value,
         'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         'Origin': 'https://cafe.naver.com',
         'x-cafe-product': 'pc',
+        'sec-ch-ua': '"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"iOS"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-site',
     }
 
     cutoff_time = datetime.now(KST) - timedelta(hours=hours_limit)
@@ -275,8 +282,8 @@ def run_domain_collector():
         # 본문 API - referer를 해당 글 URL로 동적 설정
         content_url = (
             f"https://article.cafe.naver.com/gw/v4"
-            f"/cafes/notouch7/articles/{article_id}"
-            f"?query=&requestFrom=A"
+            f"/cafes/25470135/articles/{article_id}"
+            f"?query=&useCafeId=true&requestFrom=A"
         )
         content_headers = {
             **base_headers,
