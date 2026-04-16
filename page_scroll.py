@@ -312,7 +312,7 @@ def collect_blog(cookie_value: str, hours_limit: int,
 
             if debug_mode and page == 1:
                 st.markdown("**🛠 블로그 디버그**")
-                st.code(f"HTTP {res.status_code} | {len(res.text):,} bytes\n{res.text[:800]}")
+                st.code(f"HTTP {res.status_code} | {len(res.text):,} bytes\n{res.text[:2000]}")
 
             # JSON 응답 파싱
             try:
