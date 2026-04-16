@@ -33,7 +33,7 @@ EXCLUDE_DOMAINS = {
     'hankyung.com', 'yna.co.kr', 'yonhapnews.co.kr',
     'newsis.com', 'news1.kr', 'nocutnews.co.kr', 'ohmynews.com',
     'sbs.co.kr', 'kbs.co.kr', 'mbc.co.kr', 'jtbc.co.kr', 'ytn.co.kr',
-    'etnews.com', 'dt.co.kr', 'zdnet.co.kr', 'bloter.net',
+    'etnews.com', 'dt.co.kr', 'zdnet.co.kr', 'bloter.net', 'asiae.co.kr',
 }
 
 
