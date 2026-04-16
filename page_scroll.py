@@ -341,7 +341,7 @@ def collect_blog(cookie_value: str, hours_limit: int,
 
             if not posts:
                 if debug_mode:
-                    st.error(f"posts 없음(빈 리스트 또는 파싱 실패). postList 값: {data.get('postList')}")
+                    st.error(f"posts 없음. data keys: {list(data.keys())} | postList: {str(data.get('postList'))[:200]}")
                 stop = True
                 break
 
