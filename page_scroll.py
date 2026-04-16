@@ -51,10 +51,9 @@ URL_PATTERN = re.compile(
     r'\.[a-zA-Z]{2,})'
 )
 
-# http 없이 텍스트로만 적힌 도메인 패턴 (주요 TLD만)
+# http 없이 텍스트로만 적힌 도메인 패턴 (서브도메인 포함, 주요 TLD만)
 PLAIN_DOMAIN_PATTERN = re.compile(
-    r'\b([a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]'
-    r'\.(?:com|net|org|io|kr|co\.kr|shop|site|online|store|info|biz|xyz|top|club))\b'
+    r'\b((?:[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]\.)+(?:com|net|org|io|kr|co\.kr|shop|site|online|store|info|biz|xyz|top|club))\b'
 )
 
 
